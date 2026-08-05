@@ -67,7 +67,7 @@
 
   .layout{
     display:grid;
-    grid-template-columns:300px 1fr;
+    grid-template-columns:320px 1fr;
     gap:24px;
   }
   @media (max-width:880px){
@@ -89,6 +89,14 @@
     color:var(--amber);
     border-bottom:1px solid var(--line);
     padding-bottom:8px;
+  }
+  .panel-hint{
+    font-size:10px;
+    color:var(--paper-dim);
+    text-transform:none;
+    letter-spacing:0.02em;
+    margin:-8px 0 14px;
+    line-height:1.5;
   }
 
   .field{margin-bottom:14px;}
@@ -224,6 +232,50 @@
   }
   .dice:hover{border-color:var(--amber); color:var(--amber);}
 
+  /* ink pass stack */
+  #passRows{margin-bottom:14px;}
+  .pass-row{
+    border:1px solid var(--line);
+    background:var(--ink-black);
+    padding:12px;
+    margin-top:10px;
+    cursor:grab;
+  }
+  .pass-row:first-child{margin-top:0;}
+  .pass-row.dragging{opacity:0.35;}
+  .pass-row.drag-over{border-color:var(--amber);}
+  .pass-row-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:10px;
+  }
+  .pass-row-title{
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--paper-dim);
+  }
+  .pass-row-title .handle{margin-right:6px; color:var(--steel);}
+  .pass-row-actions{display:flex; gap:6px;}
+  .pass-row-actions button{
+    width:24px;
+    height:24px;
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--paper);
+    cursor:pointer;
+    font-size:12px;
+    line-height:1;
+    padding:0;
+  }
+  .pass-row-actions button:hover{border-color:var(--amber); color:var(--amber);}
+  .pass-row-actions button.remove:hover{border-color:var(--rust); color:var(--rust);}
+  .pass-row .field{margin-bottom:8px;}
+  .pass-row .field:last-child{margin-bottom:0;}
+  .pass-offsets{display:flex; gap:8px;}
+  .pass-offsets .field{flex:1;}
+
   .stage{
     border:1px solid var(--line);
     background:var(--charcoal);
@@ -286,12 +338,12 @@
   <header>
     <div>
       <h1>Screenprint Studio</h1>
-      <div class="sub">Photostencil &amp; duotone silkscreen simulation</div>
+      <div class="sub">Photostencil &amp; multi-pass silkscreen simulation</div>
     </div>
     <div class="docket">
       Ground pass — <span>flat colour</span><br>
-      Ink pass — <span>posterized + grain</span><br>
-      Registration — <span>ghost pass</span>
+      Ink passes — <span>reorderable stack</span><br>
+      Registration — <span>per-pass drift</span>
     </div>
   </header>
 
@@ -307,39 +359,25 @@
       </div>
 
       <div class="panel">
-        <h2>02 — Ground &amp; Ink</h2>
-        <div class="cm-pair">
-          <div class="cm-color">
-            <div class="cm-color-title">Background</div>
-            <div class="cm-swatch-input">
-              <input type="color" id="groundColor" value="#F2D879">
-              <input type="text" id="groundColorHex" value="#F2D879" maxlength="7">
-            </div>
-          </div>
-          <div class="cm-color">
-            <div class="cm-color-title">Image / ink</div>
-            <div class="cm-swatch-input">
-              <input type="color" id="inkColor" value="#4FA8C9">
-              <input type="text" id="inkColorHex" value="#4FA8C9" maxlength="7">
-            </div>
-          </div>
+        <h2>02 — Background</h2>
+        <div class="cm-swatch-input">
+          <input type="color" id="groundColor" value="#F2D879">
+          <input type="text" id="groundColorHex" value="#F2D879" maxlength="7">
         </div>
-        <button class="action" id="randomizeBothBtn">Randomize both</button>
-        <div class="cm-pair" style="margin-top:8px;">
-          <button class="secondary" id="randomizeBgBtn" style="margin-top:0;">Randomize bg</button>
-          <button class="secondary" id="randomizeInkBtn" style="margin-top:0;">Randomize ink</button>
-        </div>
+        <button class="secondary" id="randomizeBgBtn">Randomize background</button>
       </div>
 
       <div class="panel">
-        <h2>03 — Screen Mechanics</h2>
-        <div class="field">
-          <label>Contrast / cutoff <b id="thresholdVal">50</b></label>
-          <div class="field-row">
-            <input type="range" id="threshold" min="10" max="90" value="50">
-            <button type="button" class="dice" data-target="threshold" title="Randomize contrast / cutoff">🎲</button>
-          </div>
-        </div>
+        <h2>03 — Ink Passes</h2>
+        <div class="panel-hint">Each pass captures its own tonal band of the source and gets its own registration drift. Drag a pass to reorder the stack — later passes print on top and win where they overlap.</div>
+        <div id="passRows"></div>
+        <button class="secondary" id="addPassBtn" style="margin-top:0;">+ Add ink pass</button>
+        <button class="secondary" id="randomizePassesBtn">Randomize all passes</button>
+        <button class="secondary" id="randomizeOrderBtn">Randomize order</button>
+      </div>
+
+      <div class="panel">
+        <h2>04 — Screen Mechanics</h2>
         <div class="field">
           <label>Edge feather <b id="featherVal">12</b></label>
           <div class="field-row">
@@ -362,29 +400,13 @@
           </div>
         </div>
         <button class="secondary" id="randomizeMechanicsBtn">Randomize all mechanics</button>
-        <button class="action" id="randomizeAllBtn" style="margin-top:8px;">Randomize colour + mechanics</button>
-      </div>
-
-      <div class="panel">
-        <h2>04 — Registration</h2>
-        <div class="field">
-          <label>Ghost pass colour</label>
-          <input type="color" id="ghostColor" value="#2E5FA8">
-        </div>
-        <div class="field">
-          <label>Horizontal drift <b id="offXVal">6px</b></label>
-          <input type="range" id="offX" min="-25" max="25" value="6">
-        </div>
-        <div class="field">
-          <label>Vertical drift <b id="offYVal">0px</b></label>
-          <input type="range" id="offY" min="-25" max="25" value="0">
-        </div>
       </div>
 
       <div class="panel">
         <h2>05 — Print</h2>
         <button class="action" id="renderBtn">Pull the print</button>
         <button class="secondary" id="reseedBtn">Reseed grain</button>
+        <button class="secondary" id="randomizeAllBtn">Randomize everything</button>
         <button class="secondary" id="downloadBtn">Download PNG</button>
       </div>
 
@@ -399,22 +421,11 @@
   </div>
 
   <footer>
-    Runs entirely in-browser. Nothing uploaded leaves this page. Each pull posterizes the source against the ground/ink duotone, breaks up ink coverage with a seeded grain field, and lays a slightly off-register ghost pass underneath to mimic uneven multi-pass screen printing.
+    Runs entirely in-browser. Nothing uploaded leaves this page. Each pull posterizes the source into one tonal band per ink pass, breaks up coverage with a seeded grain field, and composites the passes bottom-to-top in stack order — with each pass's own registration drift, so overlaps and near-misses come out like a real hand-pulled multi-screen edition.
   </footer>
 </div>
 
 <script>
-const defaultPalette = [
-  {bg:'#F2D879', ink:'#4FA8C9'}, // canary / sky blue
-  {bg:'#C9D9E3', ink:'#2A4E82'}, // powder blue / navy
-  {bg:'#EFC8DD', ink:'#7A1F4B'}, // pink / magenta
-  {bg:'#CC2B3D', ink:'#1E2A83'}, // red / blue
-  {bg:'#8FC63F', ink:'#5B2E91'}, // green / purple
-  {bg:'#E8892E', ink:'#1A1A1A'}, // orange / black
-  {bg:'#7FD1D1', ink:'#6B1F2A'}, // cyan / maroon
-  {bg:'#D9B8E0', ink:'#1F6B5E'}, // lilac / teal
-];
-
 function bindColorHex(colorEl, hexEl, onChange){
   colorEl.addEventListener('input', ()=>{
     hexEl.value = colorEl.value.toUpperCase();
@@ -433,10 +444,6 @@ function bindColorHex(colorEl, hexEl, onChange){
   });
 }
 
-bindColorHex(document.getElementById('groundColor'), document.getElementById('groundColorHex'), scheduleRenderSafe);
-bindColorHex(document.getElementById('inkColor'), document.getElementById('inkColorHex'), scheduleRenderSafe);
-function scheduleRenderSafe(){ if(typeof scheduleRender === 'function') scheduleRender(); }
-
 function hslToHex(h, s, l){
   s/=100; l/=100;
   const k = n => (n + h/30) % 12;
@@ -451,50 +458,183 @@ function randomVividHex(){
   const l = 30+Math.random()*40;
   return hslToHex(h, s, l);
 }
-function setColorPair(colorId, hexId, hex){
-  document.getElementById(colorId).value = hex;
-  document.getElementById(hexId).value = hex.toUpperCase();
-}
-function randomCuratedPair(){
-  return defaultPalette[Math.floor(Math.random()*defaultPalette.length)];
+function randInt(min, max){
+  return Math.floor(min + Math.random()*(max-min+1));
 }
 
-document.getElementById('randomizeBothBtn').addEventListener('click', ()=>{
-  const pick = randomCuratedPair();
-  setColorPair('groundColor','groundColorHex', pick.bg);
-  setColorPair('inkColor','inkColorHex', pick.ink);
-  scheduleRender();
-});
+bindColorHex(document.getElementById('groundColor'), document.getElementById('groundColorHex'), scheduleRenderSafe);
+function scheduleRenderSafe(){ if(typeof scheduleRender === 'function') scheduleRender(); }
+
 document.getElementById('randomizeBgBtn').addEventListener('click', ()=>{
-  setColorPair('groundColor','groundColorHex', randomVividHex());
-  scheduleRender();
-});
-document.getElementById('randomizeInkBtn').addEventListener('click', ()=>{
-  setColorPair('inkColor','inkColorHex', randomVividHex());
+  const hex = randomVividHex();
+  document.getElementById('groundColor').value = hex;
+  document.getElementById('groundColorHex').value = hex;
   scheduleRender();
 });
 
-function randomizeSlider(id){
-  const el = document.getElementById(id);
-  const min = parseInt(el.min), max = parseInt(el.max);
-  const val = Math.floor(min + Math.random()*(max-min+1));
-  el.value = Math.max(min, Math.min(max, val));
-  el.dispatchEvent(new Event('input', {bubbles:true}));
+// ---- Ink pass stack ----
+let passIdCounter = 0;
+function randomPassParams(){
+  return {
+    id: ++passIdCounter,
+    color: randomVividHex(),
+    threshold: randInt(15, 85),
+    offsetX: randInt(-18, 18),
+    offsetY: randInt(-18, 18),
+  };
 }
-document.querySelectorAll('.dice').forEach(btn=>{
-  btn.addEventListener('click', ()=> randomizeSlider(btn.dataset.target));
+
+let inkPasses = [
+  Object.assign(randomPassParams(), {color:'#4FA8C9', threshold:32, offsetX:0, offsetY:0}),
+  Object.assign(randomPassParams(), {color:'#7A1F4B', threshold:55, offsetX:6, offsetY:0}),
+  Object.assign(randomPassParams(), {color:'#1A1A1A', threshold:76, offsetX:-4, offsetY:2}),
+];
+
+let draggedId = null;
+
+function buildPassRows(){
+  const container = document.getElementById('passRows');
+  container.innerHTML = '';
+  inkPasses.forEach((pass, i) => {
+    const posLabel = inkPasses.length === 1 ? 'only pass'
+      : i === 0 ? 'bottom — prints first'
+      : i === inkPasses.length-1 ? 'top — prints last'
+      : `layer ${i+1} of ${inkPasses.length}`;
+
+    const row = document.createElement('div');
+    row.className = 'pass-row';
+    row.draggable = true;
+    row.dataset.id = pass.id;
+    row.innerHTML = `
+      <div class="pass-row-head">
+        <div class="pass-row-title"><span class="handle">⠿</span>${posLabel}</div>
+        <div class="pass-row-actions">
+          <button type="button" class="dice-pass" title="Randomize this pass">🎲</button>
+          <button type="button" class="remove" title="Remove this pass">✕</button>
+        </div>
+      </div>
+      <div class="field">
+        <div class="cm-swatch-input">
+          <input type="color" class="pass-color" value="${pass.color}">
+          <input type="text" class="pass-color-hex" value="${pass.color}" maxlength="7">
+        </div>
+      </div>
+      <div class="field">
+        <label>Threshold <b class="pass-threshold-val">${pass.threshold}</b></label>
+        <input type="range" class="pass-threshold" min="5" max="95" value="${pass.threshold}">
+      </div>
+      <div class="pass-offsets">
+        <div class="field">
+          <label>Drift X <b class="pass-offx-val">${pass.offsetX}px</b></label>
+          <input type="range" class="pass-offx" min="-25" max="25" value="${pass.offsetX}">
+        </div>
+        <div class="field">
+          <label>Drift Y <b class="pass-offy-val">${pass.offsetY}px</b></label>
+          <input type="range" class="pass-offy" min="-25" max="25" value="${pass.offsetY}">
+        </div>
+      </div>
+    `;
+    container.appendChild(row);
+
+    const colorEl = row.querySelector('.pass-color');
+    const hexEl = row.querySelector('.pass-color-hex');
+    bindColorHex(colorEl, hexEl, ()=>{ pass.color = colorEl.value.toUpperCase(); scheduleRender(); });
+
+    const thresholdEl = row.querySelector('.pass-threshold');
+    const thresholdVal = row.querySelector('.pass-threshold-val');
+    thresholdEl.addEventListener('input', ()=>{
+      pass.threshold = parseInt(thresholdEl.value);
+      thresholdVal.textContent = pass.threshold;
+      scheduleRender();
+    });
+
+    const offxEl = row.querySelector('.pass-offx');
+    const offxVal = row.querySelector('.pass-offx-val');
+    offxEl.addEventListener('input', ()=>{
+      pass.offsetX = parseInt(offxEl.value);
+      offxVal.textContent = pass.offsetX+'px';
+      scheduleRender();
+    });
+
+    const offyEl = row.querySelector('.pass-offy');
+    const offyVal = row.querySelector('.pass-offy-val');
+    offyEl.addEventListener('input', ()=>{
+      pass.offsetY = parseInt(offyEl.value);
+      offyVal.textContent = pass.offsetY+'px';
+      scheduleRender();
+    });
+
+    row.querySelector('.dice-pass').addEventListener('click', ()=>{
+      const fresh = randomPassParams();
+      pass.color = fresh.color; pass.threshold = fresh.threshold;
+      pass.offsetX = fresh.offsetX; pass.offsetY = fresh.offsetY;
+      buildPassRows();
+      scheduleRender();
+    });
+
+    row.querySelector('.remove').addEventListener('click', ()=>{
+      if(inkPasses.length <= 1) return;
+      inkPasses = inkPasses.filter(p => p.id !== pass.id);
+      buildPassRows();
+      scheduleRender();
+    });
+
+    row.addEventListener('dragstart', ()=>{
+      draggedId = pass.id;
+      row.classList.add('dragging');
+    });
+    row.addEventListener('dragend', ()=>{
+      row.classList.remove('dragging');
+      document.querySelectorAll('.pass-row').forEach(r => r.classList.remove('drag-over'));
+    });
+    row.addEventListener('dragover', e=>{
+      e.preventDefault();
+      if(pass.id !== draggedId) row.classList.add('drag-over');
+    });
+    row.addEventListener('dragleave', ()=>{ row.classList.remove('drag-over'); });
+    row.addEventListener('drop', e=>{
+      e.preventDefault();
+      row.classList.remove('drag-over');
+      if(draggedId === null || draggedId === pass.id) return;
+      const fromIdx = inkPasses.findIndex(p => p.id === draggedId);
+      const toIdx = inkPasses.findIndex(p => p.id === pass.id);
+      if(fromIdx === -1 || toIdx === -1) return;
+      const [moved] = inkPasses.splice(fromIdx, 1);
+      inkPasses.splice(toIdx, 0, moved);
+      draggedId = null;
+      buildPassRows();
+      scheduleRender();
+    });
+  });
+}
+
+document.getElementById('addPassBtn').addEventListener('click', ()=>{
+  if(inkPasses.length >= 6) return;
+  inkPasses.push(randomPassParams());
+  buildPassRows();
+  scheduleRender();
 });
-document.getElementById('randomizeMechanicsBtn').addEventListener('click', ()=>{
-  ['threshold','feather','grainIntensity','grainScale'].forEach(randomizeSlider);
+document.getElementById('randomizePassesBtn').addEventListener('click', ()=>{
+  inkPasses.forEach(pass=>{
+    const fresh = randomPassParams();
+    pass.color = fresh.color; pass.threshold = fresh.threshold;
+    pass.offsetX = fresh.offsetX; pass.offsetY = fresh.offsetY;
+  });
+  buildPassRows();
+  scheduleRender();
 });
-document.getElementById('randomizeAllBtn').addEventListener('click', ()=>{
-  const pick = randomCuratedPair();
-  setColorPair('groundColor','groundColorHex', pick.bg);
-  setColorPair('inkColor','inkColorHex', pick.ink);
-  ['threshold','feather','grainIntensity','grainScale'].forEach(randomizeSlider);
+document.getElementById('randomizeOrderBtn').addEventListener('click', ()=>{
+  for(let i = inkPasses.length-1; i>0; i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [inkPasses[i], inkPasses[j]] = [inkPasses[j], inkPasses[i]];
+  }
+  buildPassRows();
   scheduleRender();
 });
 
+buildPassRows();
+
+// ---- Screen mechanics ----
 let sourceImg = null;
 let seed = Math.floor(Math.random()*100000);
 
@@ -516,21 +656,49 @@ fileInput.addEventListener('change', e=>{
   reader.readAsDataURL(f);
 });
 
-// live labels
 const controlsMap = [
-  ['threshold','thresholdVal', v=>v],
   ['feather','featherVal', v=>v],
   ['grainIntensity','grainIntensityVal', v=>(v/100).toFixed(2)],
   ['grainScale','grainScaleVal', v=>v+'px'],
-  ['offX','offXVal', v=>v+'px'],
-  ['offY','offYVal', v=>v+'px'],
 ];
 controlsMap.forEach(([id,labelId,fmt])=>{
   const el = document.getElementById(id);
   const label = document.getElementById(labelId);
   el.addEventListener('input', ()=>{ label.textContent = fmt(el.value); scheduleRender(); });
 });
-document.getElementById('ghostColor').addEventListener('input', scheduleRender);
+
+function randomizeSlider(id){
+  const el = document.getElementById(id);
+  const min = parseInt(el.min), max = parseInt(el.max);
+  const val = randInt(min, max);
+  el.value = Math.max(min, Math.min(max, val));
+  el.dispatchEvent(new Event('input', {bubbles:true}));
+}
+document.querySelectorAll('.dice[data-target]').forEach(btn=>{
+  btn.addEventListener('click', ()=> randomizeSlider(btn.dataset.target));
+});
+document.getElementById('randomizeMechanicsBtn').addEventListener('click', ()=>{
+  ['feather','grainIntensity','grainScale'].forEach(randomizeSlider);
+});
+
+document.getElementById('randomizeAllBtn').addEventListener('click', ()=>{
+  const hex = randomVividHex();
+  document.getElementById('groundColor').value = hex;
+  document.getElementById('groundColorHex').value = hex;
+  inkPasses.forEach(pass=>{
+    const fresh = randomPassParams();
+    pass.color = fresh.color; pass.threshold = fresh.threshold;
+    pass.offsetX = fresh.offsetX; pass.offsetY = fresh.offsetY;
+  });
+  for(let i = inkPasses.length-1; i>0; i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [inkPasses[i], inkPasses[j]] = [inkPasses[j], inkPasses[i]];
+  }
+  buildPassRows();
+  ['feather','grainIntensity','grainScale'].forEach(randomizeSlider);
+  seed = Math.floor(Math.random()*100000);
+  scheduleRender();
+});
 
 let renderTimer=null;
 function scheduleRender(){
@@ -605,32 +773,30 @@ function makeNoiseField(w, h, cellSize, rand){
   };
 }
 
-function renderPrint(canvas, panelSeed){
+function renderPrint(canvas, baseSeed){
   const w = canvas.width, h = canvas.height;
   const ctx = canvas.getContext('2d');
-  const rand = mulberry32(panelSeed);
-  const rand2 = mulberry32(panelSeed + 99991);
-  const rand3 = mulberry32(panelSeed + 55555);
 
-  const threshold = parseInt(document.getElementById('threshold').value)/100;
   const feather = parseInt(document.getElementById('feather').value)/100;
   const grainIntensity = parseInt(document.getElementById('grainIntensity').value)/100;
   const grainScale = parseInt(document.getElementById('grainScale').value);
-  const offX = parseInt(document.getElementById('offX').value);
-  const offY = parseInt(document.getElementById('offY').value);
 
   const bgRGB = hexToRgb(document.getElementById('groundColorHex').value);
-  const inkRGB = hexToRgb(document.getElementById('inkColorHex').value);
-  const ghostRGB = hexToRgb(document.getElementById('ghostColor').value);
-
   const lum = getSourceLuminance(sourceImg, w, h);
-  const noiseFine = makeNoiseField(w, h, grainScale, rand);
-  const noiseCoarse = makeNoiseField(w, h, grainScale*3.5, rand2);
-  const noiseGhost = makeNoiseField(w, h, grainScale, rand3);
 
-  const edge0 = Math.max(0, threshold-feather);
-  const edge1 = Math.min(1, threshold+feather);
-  const hasGhost = offX !== 0 || offY !== 0;
+  const rCoarse = mulberry32(baseSeed + 424242);
+  const noiseCoarse = makeNoiseField(w, h, grainScale*3.5, rCoarse);
+
+  const passLayers = inkPasses.map((pass, i) => {
+    const rand = mulberry32(baseSeed + (i+1)*97711 + pass.id*13);
+    return {
+      rgb: hexToRgb(pass.color),
+      threshold: pass.threshold/100,
+      offsetX: pass.offsetX,
+      offsetY: pass.offsetY,
+      noise: makeNoiseField(w, h, grainScale, rand),
+    };
+  });
 
   const imgData = ctx.createImageData(w, h);
   const data = imgData.data;
@@ -638,40 +804,35 @@ function renderPrint(canvas, panelSeed){
   for(let y=0; y<h; y++){
     for(let x=0; x<w; x++){
       const idx = y*w+x;
-      const objectness = 1 - (lum[idx]/255);
-      const maskAlpha = smoothstep(edge0, edge1, objectness);
-
-      const grain = noiseFine(x, y);
-      let inkAlpha = maskAlpha * (1 - grainIntensity*(1-grain));
-      inkAlpha = Math.max(0, Math.min(1, inkAlpha));
 
       let r = bgRGB[0], g = bgRGB[1], b = bgRGB[2];
+      let totalCoverage = 0;
 
-      // ghost pass: off-register duplicate sampled from shifted source coords, laid beneath main ink
-      let ghostAlpha = 0;
-      if(hasGhost){
-        const sx = Math.min(w-1, Math.max(0, x-offX));
-        const sy = Math.min(h-1, Math.max(0, y-offY));
-        const gObjectness = 1 - (lum[sy*w+sx]/255);
-        const gMask = smoothstep(edge0, edge1, gObjectness);
-        const gGrain = noiseGhost(x, y);
-        ghostAlpha = gMask * (1 - grainIntensity*0.6*(1-gGrain));
-        ghostAlpha = Math.max(0, Math.min(1, ghostAlpha)) * 0.6;
+      for(let p=0; p<passLayers.length; p++){
+        const layer = passLayers[p];
+        const sx = layer.offsetX ? Math.min(w-1, Math.max(0, x-layer.offsetX)) : x;
+        const sy = layer.offsetY ? Math.min(h-1, Math.max(0, y-layer.offsetY)) : y;
+        const objectness = 1 - (lum[sy*w+sx]/255);
+        const edge0 = Math.max(0, layer.threshold-feather);
+        const edge1 = Math.min(1, layer.threshold+feather);
+        const mask = smoothstep(edge0, edge1, objectness);
+        const grain = layer.noise(x, y);
+        let alpha = mask * (1 - grainIntensity*(1-grain));
+        alpha = Math.max(0, Math.min(1, alpha));
+
+        r += (layer.rgb[0]-r)*alpha;
+        g += (layer.rgb[1]-g)*alpha;
+        b += (layer.rgb[2]-b)*alpha;
+        if(alpha > totalCoverage) totalCoverage = alpha;
       }
-      r += (ghostRGB[0]-r)*ghostAlpha;
-      g += (ghostRGB[1]-g)*ghostAlpha;
-      b += (ghostRGB[2]-b)*ghostAlpha;
 
-      // subtle whole-canvas aging fleck, kept clear of the main ink shape
-      const fleck = Math.max(0, (noiseCoarse(x, y)-0.6)) * 0.35 * (1-maskAlpha) * (1-ghostAlpha);
-      r += (inkRGB[0]-r)*fleck;
-      g += (inkRGB[1]-g)*fleck;
-      b += (inkRGB[2]-b)*fleck;
-
-      // main ink pass on top
-      r += (inkRGB[0]-r)*inkAlpha;
-      g += (inkRGB[1]-g)*inkAlpha;
-      b += (inkRGB[2]-b)*inkAlpha;
+      if(passLayers.length){
+        const tint = passLayers[passLayers.length-1].rgb;
+        const fleck = Math.max(0, (noiseCoarse(x, y)-0.6)) * 0.35 * (1-totalCoverage);
+        r += (tint[0]-r)*fleck;
+        g += (tint[1]-g)*fleck;
+        b += (tint[2]-b)*fleck;
+      }
 
       const px = idx*4;
       data[px] = r; data[px+1] = g; data[px+2] = b; data[px+3] = 255;
