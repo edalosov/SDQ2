@@ -239,11 +239,8 @@
     background:var(--ink-black);
     padding:12px;
     margin-top:10px;
-    cursor:grab;
   }
   .pass-row:first-child{margin-top:0;}
-  .pass-row.dragging{opacity:0.35;}
-  .pass-row.drag-over{border-color:var(--amber);}
   .pass-row-head{
     display:flex;
     justify-content:space-between;
@@ -256,7 +253,6 @@
     letter-spacing:0.06em;
     color:var(--paper-dim);
   }
-  .pass-row-title .handle{margin-right:6px; color:var(--steel);}
   .pass-row-actions{display:flex; gap:6px;}
   .pass-row-actions button{
     width:24px;
@@ -269,8 +265,9 @@
     line-height:1;
     padding:0;
   }
-  .pass-row-actions button:hover{border-color:var(--amber); color:var(--amber);}
-  .pass-row-actions button.remove:hover{border-color:var(--rust); color:var(--rust);}
+  .pass-row-actions button:hover:not(:disabled){border-color:var(--amber); color:var(--amber);}
+  .pass-row-actions button.remove:hover:not(:disabled){border-color:var(--rust); color:var(--rust);}
+  .pass-row-actions button:disabled{opacity:0.3; cursor:default;}
   .pass-row .field{margin-bottom:8px;}
   .pass-row .field:last-child{margin-bottom:0;}
   .pass-offsets{display:flex; gap:8px;}
@@ -369,7 +366,7 @@
 
       <div class="panel">
         <h2>03 — Ink Passes</h2>
-        <div class="panel-hint">Each pass captures its own tonal band of the source and gets its own registration drift. Drag a pass to reorder the stack — later passes print on top and win where they overlap.</div>
+        <div class="panel-hint">Each pass captures its own tonal band of the source and gets its own registration drift. Use the arrows to reorder the stack — later passes print on top and win where they overlap.</div>
         <div id="passRows"></div>
         <button class="secondary" id="addPassBtn" style="margin-top:0;">+ Add ink pass</button>
         <button class="secondary" id="randomizePassesBtn">Randomize all passes</button>
@@ -490,8 +487,6 @@ let inkPasses = [
   Object.assign(randomPassParams(), {color:'#1A1A1A', threshold:76, offsetX:-4, offsetY:2}),
 ];
 
-let draggedId = null;
-
 function buildPassRows(){
   const container = document.getElementById('passRows');
   container.innerHTML = '';
@@ -503,14 +498,15 @@ function buildPassRows(){
 
     const row = document.createElement('div');
     row.className = 'pass-row';
-    row.draggable = true;
     row.dataset.id = pass.id;
     row.innerHTML = `
       <div class="pass-row-head">
-        <div class="pass-row-title"><span class="handle">⠿</span>${posLabel}</div>
+        <div class="pass-row-title">${posLabel}</div>
         <div class="pass-row-actions">
+          <button type="button" class="move-up" title="Move up (print later)" ${i===0 ? 'disabled' : ''}>▲</button>
+          <button type="button" class="move-down" title="Move down (print earlier)" ${i===inkPasses.length-1 ? 'disabled' : ''}>▼</button>
           <button type="button" class="dice-pass" title="Randomize this pass">🎲</button>
-          <button type="button" class="remove" title="Remove this pass">✕</button>
+          <button type="button" class="remove" title="Remove this pass" ${inkPasses.length<=1 ? 'disabled' : ''}>✕</button>
         </div>
       </div>
       <div class="field">
@@ -579,29 +575,17 @@ function buildPassRows(){
       scheduleRender();
     });
 
-    row.addEventListener('dragstart', ()=>{
-      draggedId = pass.id;
-      row.classList.add('dragging');
+    row.querySelector('.move-up').addEventListener('click', ()=>{
+      const idx = inkPasses.findIndex(p => p.id === pass.id);
+      if(idx <= 0) return;
+      [inkPasses[idx-1], inkPasses[idx]] = [inkPasses[idx], inkPasses[idx-1]];
+      buildPassRows();
+      scheduleRender();
     });
-    row.addEventListener('dragend', ()=>{
-      row.classList.remove('dragging');
-      document.querySelectorAll('.pass-row').forEach(r => r.classList.remove('drag-over'));
-    });
-    row.addEventListener('dragover', e=>{
-      e.preventDefault();
-      if(pass.id !== draggedId) row.classList.add('drag-over');
-    });
-    row.addEventListener('dragleave', ()=>{ row.classList.remove('drag-over'); });
-    row.addEventListener('drop', e=>{
-      e.preventDefault();
-      row.classList.remove('drag-over');
-      if(draggedId === null || draggedId === pass.id) return;
-      const fromIdx = inkPasses.findIndex(p => p.id === draggedId);
-      const toIdx = inkPasses.findIndex(p => p.id === pass.id);
-      if(fromIdx === -1 || toIdx === -1) return;
-      const [moved] = inkPasses.splice(fromIdx, 1);
-      inkPasses.splice(toIdx, 0, moved);
-      draggedId = null;
+    row.querySelector('.move-down').addEventListener('click', ()=>{
+      const idx = inkPasses.findIndex(p => p.id === pass.id);
+      if(idx === -1 || idx >= inkPasses.length-1) return;
+      [inkPasses[idx+1], inkPasses[idx]] = [inkPasses[idx], inkPasses[idx+1]];
       buildPassRows();
       scheduleRender();
     });
