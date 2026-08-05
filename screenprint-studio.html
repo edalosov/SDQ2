@@ -25,7 +25,7 @@
     min-height:100vh;
   }
   .frame{
-    max-width:1240px;
+    max-width:1600px;
     margin:0 auto;
     padding:28px 24px 60px;
   }
@@ -67,7 +67,7 @@
 
   .layout{
     display:grid;
-    grid-template-columns:320px 1fr;
+    grid-template-columns:300px 1fr;
     gap:24px;
   }
   @media (max-width:880px){
@@ -135,16 +135,6 @@
   .upload-zone:hover{border-color:var(--amber); color:var(--paper);}
   .upload-zone input{display:none;}
 
-  select{
-    width:100%;
-    background:var(--ink-black);
-    color:var(--paper);
-    border:1px solid var(--line);
-    padding:8px;
-    font-family:'IBM Plex Mono', monospace;
-    font-size:12px;
-  }
-
   button.action{
     width:100%;
     padding:11px;
@@ -175,20 +165,7 @@
   }
   button.secondary:hover{border-color:var(--paper);}
 
-  /* color map rows */
-  .cm-row{
-    border-top:1px solid var(--line);
-    padding-top:12px;
-    margin-top:12px;
-  }
-  .cm-row:first-child{border-top:none; margin-top:0; padding-top:0;}
-  .cm-label{
-    font-size:11px;
-    text-transform:uppercase;
-    letter-spacing:0.06em;
-    color:var(--paper-dim);
-    margin-bottom:8px;
-  }
+  /* color pair rows */
   .cm-pair{
     display:flex;
     gap:10px;
@@ -234,7 +211,7 @@
     display:flex;
     flex-direction:column;
     align-items:center;
-    min-height:400px;
+    min-height:700px;
   }
   .stage-label{
     align-self:flex-start;
@@ -248,6 +225,8 @@
     width:100%;
     display:flex;
     justify-content:center;
+    align-items:center;
+    flex:1;
     background:
       linear-gradient(45deg,#2a2824 25%,transparent 25%) -10px 0/20px 20px,
       linear-gradient(-45deg,#2a2824 25%,transparent 25%) -10px 0/20px 20px,
@@ -270,12 +249,6 @@
     letter-spacing:0.06em;
     line-height:1.8;
   }
-  .grid-out{
-    display:grid;
-    gap:4px;
-    margin:0 auto;
-  }
-  .grid-out canvas{width:100%;}
 
   footer{
     margin-top:20px;
@@ -296,9 +269,9 @@
       <div class="sub">Photostencil &amp; duotone silkscreen simulation</div>
     </div>
     <div class="docket">
-      Palette — <span>duotone map</span><br>
-      Ink pass — <span>posterized</span><br>
-      Texture — <span>grain screen</span>
+      Ground pass — <span>flat colour</span><br>
+      Ink pass — <span>posterized + grain</span><br>
+      Registration — <span>ghost pass</span>
     </div>
   </header>
 
@@ -314,9 +287,24 @@
       </div>
 
       <div class="panel">
-        <h2>02 — Color Map</h2>
-        <button class="secondary" id="randomizeBtn" style="margin-top:0; margin-bottom:14px;">Randomize palette</button>
-        <div id="colorMapRows"></div>
+        <h2>02 — Ground &amp; Ink</h2>
+        <div class="cm-pair">
+          <div class="cm-color">
+            <div class="cm-color-title">Background</div>
+            <div class="cm-swatch-input">
+              <input type="color" id="groundColor" value="#F2D879">
+              <input type="text" id="groundColorHex" value="#F2D879" maxlength="7">
+            </div>
+          </div>
+          <div class="cm-color">
+            <div class="cm-color-title">Image / ink</div>
+            <div class="cm-swatch-input">
+              <input type="color" id="inkColor" value="#4FA8C9">
+              <input type="text" id="inkColorHex" value="#4FA8C9" maxlength="7">
+            </div>
+          </div>
+        </div>
+        <button class="secondary" id="randomizeBtn">Randomize colours</button>
       </div>
 
       <div class="panel">
@@ -340,17 +328,23 @@
       </div>
 
       <div class="panel">
-        <h2>04 — Edition</h2>
+        <h2>04 — Registration</h2>
         <div class="field">
-          <label>Panels</label>
-          <select id="panelCount">
-            <option value="1">Single pull</option>
-            <option value="4" selected>4 — quad</option>
-            <option value="6">6 — series</option>
-            <option value="9">9 — grid</option>
-            <option value="12">12 — full edition</option>
-          </select>
+          <label>Ghost pass colour</label>
+          <input type="color" id="ghostColor" value="#2E5FA8">
         </div>
+        <div class="field">
+          <label>Horizontal drift <b id="offXVal">6px</b></label>
+          <input type="range" id="offX" min="-25" max="25" value="6">
+        </div>
+        <div class="field">
+          <label>Vertical drift <b id="offYVal">0px</b></label>
+          <input type="range" id="offY" min="-25" max="25" value="0">
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>05 — Print</h2>
         <button class="action" id="renderBtn">Pull the print</button>
         <button class="secondary" id="reseedBtn">Reseed grain</button>
         <button class="secondary" id="downloadBtn">Download PNG</button>
@@ -361,13 +355,13 @@
     <div class="stage">
       <div class="stage-label">Proof</div>
       <div class="canvas-wrap" id="canvasWrap">
-        <div id="empty">Load a source image, then pull a print.<br>Each panel takes its own background / ink colour from the map on the left.</div>
+        <div id="empty">Load a source image, then pull a print.</div>
       </div>
     </div>
   </div>
 
   <footer>
-    Runs entirely in-browser. Nothing uploaded leaves this page. Each pull posterizes the source against a per-panel duotone, then breaks up ink coverage with a seeded grain field to mimic uneven screen deposit — no halftone dot pattern, no registration ghosting.
+    Runs entirely in-browser. Nothing uploaded leaves this page. Each pull posterizes the source against the ground/ink duotone, breaks up ink coverage with a seeded grain field, and lays a slightly off-register ghost pass underneath to mimic uneven multi-pass screen printing.
   </footer>
 </div>
 
@@ -383,50 +377,10 @@ const defaultPalette = [
   {bg:'#D9B8E0', ink:'#1F6B5E'}, // lilac / teal
 ];
 
-let colorMapState = [];
-
-function buildColorMapRows(count){
-  const container = document.getElementById('colorMapRows');
-  container.innerHTML = '';
-  const newState = [];
-  for(let i=0;i<count;i++){
-    const val = colorMapState[i] || defaultPalette[i % defaultPalette.length];
-    newState.push({bg: val.bg, ink: val.ink});
-
-    const row = document.createElement('div');
-    row.className = 'cm-row';
-    row.innerHTML = `
-      <div class="cm-label">Panel ${i+1}</div>
-      <div class="cm-pair">
-        <div class="cm-color">
-          <div class="cm-color-title">Background</div>
-          <div class="cm-swatch-input">
-            <input type="color" class="cm-bg" value="${val.bg}">
-            <input type="text" class="cm-bg-hex" value="${val.bg.toUpperCase()}" maxlength="7">
-          </div>
-        </div>
-        <div class="cm-color">
-          <div class="cm-color-title">Image / ink</div>
-          <div class="cm-swatch-input">
-            <input type="color" class="cm-ink" value="${val.ink}">
-            <input type="text" class="cm-ink-hex" value="${val.ink.toUpperCase()}" maxlength="7">
-          </div>
-        </div>
-      </div>
-    `;
-    container.appendChild(row);
-
-    bindColorHex(row.querySelector('.cm-bg'), row.querySelector('.cm-bg-hex'), i, 'bg');
-    bindColorHex(row.querySelector('.cm-ink'), row.querySelector('.cm-ink-hex'), i, 'ink');
-  }
-  colorMapState = newState;
-}
-
-function bindColorHex(colorEl, hexEl, index, key){
+function bindColorHex(colorEl, hexEl, onChange){
   colorEl.addEventListener('input', ()=>{
     hexEl.value = colorEl.value.toUpperCase();
-    colorMapState[index][key] = colorEl.value;
-    scheduleRender();
+    onChange();
   });
   hexEl.addEventListener('change', ()=>{
     let v = hexEl.value.trim();
@@ -434,34 +388,25 @@ function bindColorHex(colorEl, hexEl, index, key){
     if(/^#[0-9A-Fa-f]{6}$/.test(v)){
       colorEl.value = v;
       hexEl.value = v.toUpperCase();
-      colorMapState[index][key] = v;
-      scheduleRender();
+      onChange();
     } else {
       hexEl.value = colorEl.value.toUpperCase();
     }
   });
 }
 
+bindColorHex(document.getElementById('groundColor'), document.getElementById('groundColorHex'), scheduleRenderSafe);
+bindColorHex(document.getElementById('inkColor'), document.getElementById('inkColorHex'), scheduleRenderSafe);
+function scheduleRenderSafe(){ if(typeof scheduleRender === 'function') scheduleRender(); }
+
 document.getElementById('randomizeBtn').addEventListener('click', ()=>{
-  const rows = document.querySelectorAll('.cm-row');
-  const offset = Math.floor(Math.random()*defaultPalette.length);
-  rows.forEach((row,i)=>{
-    const val = defaultPalette[(i+offset) % defaultPalette.length];
-    row.querySelector('.cm-bg').value = val.bg;
-    row.querySelector('.cm-bg-hex').value = val.bg.toUpperCase();
-    row.querySelector('.cm-ink').value = val.ink;
-    row.querySelector('.cm-ink-hex').value = val.ink.toUpperCase();
-    colorMapState[i] = {bg: val.bg, ink: val.ink};
-  });
+  const pick = defaultPalette[Math.floor(Math.random()*defaultPalette.length)];
+  document.getElementById('groundColor').value = pick.bg;
+  document.getElementById('groundColorHex').value = pick.bg.toUpperCase();
+  document.getElementById('inkColor').value = pick.ink;
+  document.getElementById('inkColorHex').value = pick.ink.toUpperCase();
   scheduleRender();
 });
-
-document.getElementById('panelCount').addEventListener('change', ()=>{
-  buildColorMapRows(parseInt(document.getElementById('panelCount').value));
-  scheduleRender();
-});
-
-buildColorMapRows(parseInt(document.getElementById('panelCount').value));
 
 let sourceImg = null;
 let seed = Math.floor(Math.random()*100000);
@@ -490,12 +435,15 @@ const controlsMap = [
   ['feather','featherVal', v=>v],
   ['grainIntensity','grainIntensityVal', v=>(v/100).toFixed(2)],
   ['grainScale','grainScaleVal', v=>v+'px'],
+  ['offX','offXVal', v=>v+'px'],
+  ['offY','offYVal', v=>v+'px'],
 ];
 controlsMap.forEach(([id,labelId,fmt])=>{
   const el = document.getElementById(id);
   const label = document.getElementById(labelId);
   el.addEventListener('input', ()=>{ label.textContent = fmt(el.value); scheduleRender(); });
 });
+document.getElementById('ghostColor').addEventListener('input', scheduleRender);
 
 let renderTimer=null;
 function scheduleRender(){
@@ -507,6 +455,12 @@ function scheduleRender(){
 document.getElementById('renderBtn').addEventListener('click', ()=>{ seed = Math.floor(Math.random()*100000); render(); });
 document.getElementById('reseedBtn').addEventListener('click', ()=>{ seed = Math.floor(Math.random()*100000); render(); });
 document.getElementById('downloadBtn').addEventListener('click', downloadCurrent);
+
+let resizeTimer=null;
+window.addEventListener('resize', ()=>{
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(()=>{ if(sourceImg) render(); }, 200);
+});
 
 function mulberry32(a){
   return function(){
@@ -564,26 +518,32 @@ function makeNoiseField(w, h, cellSize, rand){
   };
 }
 
-function renderOnePanel(canvas, colorPair, panelSeed){
+function renderPrint(canvas, panelSeed){
   const w = canvas.width, h = canvas.height;
   const ctx = canvas.getContext('2d');
   const rand = mulberry32(panelSeed);
   const rand2 = mulberry32(panelSeed + 99991);
+  const rand3 = mulberry32(panelSeed + 55555);
 
   const threshold = parseInt(document.getElementById('threshold').value)/100;
   const feather = parseInt(document.getElementById('feather').value)/100;
   const grainIntensity = parseInt(document.getElementById('grainIntensity').value)/100;
   const grainScale = parseInt(document.getElementById('grainScale').value);
+  const offX = parseInt(document.getElementById('offX').value);
+  const offY = parseInt(document.getElementById('offY').value);
 
-  const bgRGB = hexToRgb(colorPair.bg);
-  const inkRGB = hexToRgb(colorPair.ink);
+  const bgRGB = hexToRgb(document.getElementById('groundColorHex').value);
+  const inkRGB = hexToRgb(document.getElementById('inkColorHex').value);
+  const ghostRGB = hexToRgb(document.getElementById('ghostColor').value);
 
   const lum = getSourceLuminance(sourceImg, w, h);
   const noiseFine = makeNoiseField(w, h, grainScale, rand);
   const noiseCoarse = makeNoiseField(w, h, grainScale*3.5, rand2);
+  const noiseGhost = makeNoiseField(w, h, grainScale, rand3);
 
   const edge0 = Math.max(0, threshold-feather);
   const edge1 = Math.min(1, threshold+feather);
+  const hasGhost = offX !== 0 || offY !== 0;
 
   const imgData = ctx.createImageData(w, h);
   const data = imgData.data;
@@ -598,17 +558,47 @@ function renderOnePanel(canvas, colorPair, panelSeed){
       let inkAlpha = maskAlpha * (1 - grainIntensity*(1-grain));
       inkAlpha = Math.max(0, Math.min(1, inkAlpha));
 
-      const fleck = Math.max(0, (noiseCoarse(x, y)-0.6)) * 0.35 * (1-maskAlpha);
-      const a = Math.min(1, inkAlpha + fleck);
+      let r = bgRGB[0], g = bgRGB[1], b = bgRGB[2];
+
+      // ghost pass: off-register duplicate sampled from shifted source coords, laid beneath main ink
+      let ghostAlpha = 0;
+      if(hasGhost){
+        const sx = Math.min(w-1, Math.max(0, x-offX));
+        const sy = Math.min(h-1, Math.max(0, y-offY));
+        const gObjectness = 1 - (lum[sy*w+sx]/255);
+        const gMask = smoothstep(edge0, edge1, gObjectness);
+        const gGrain = noiseGhost(x, y);
+        ghostAlpha = gMask * (1 - grainIntensity*0.6*(1-gGrain));
+        ghostAlpha = Math.max(0, Math.min(1, ghostAlpha)) * 0.6;
+      }
+      r += (ghostRGB[0]-r)*ghostAlpha;
+      g += (ghostRGB[1]-g)*ghostAlpha;
+      b += (ghostRGB[2]-b)*ghostAlpha;
+
+      // subtle whole-canvas aging fleck, kept clear of the main ink shape
+      const fleck = Math.max(0, (noiseCoarse(x, y)-0.6)) * 0.35 * (1-maskAlpha) * (1-ghostAlpha);
+      r += (inkRGB[0]-r)*fleck;
+      g += (inkRGB[1]-g)*fleck;
+      b += (inkRGB[2]-b)*fleck;
+
+      // main ink pass on top
+      r += (inkRGB[0]-r)*inkAlpha;
+      g += (inkRGB[1]-g)*inkAlpha;
+      b += (inkRGB[2]-b)*inkAlpha;
 
       const px = idx*4;
-      data[px]   = bgRGB[0] + (inkRGB[0]-bgRGB[0])*a;
-      data[px+1] = bgRGB[1] + (inkRGB[1]-bgRGB[1])*a;
-      data[px+2] = bgRGB[2] + (inkRGB[2]-bgRGB[2])*a;
-      data[px+3] = 255;
+      data[px] = r; data[px+1] = g; data[px+2] = b; data[px+3] = 255;
     }
   }
   ctx.putImageData(imgData, 0, 0);
+}
+
+function getStageSize(){
+  const wrap = document.getElementById('canvasWrap');
+  const available = wrap.clientWidth - 32; // account for wrap padding
+  const w = Math.max(320, Math.min(1200, available));
+  const h = Math.round(w * (sourceImg.height/sourceImg.width));
+  return {w, h};
 }
 
 function render(){
@@ -616,46 +606,19 @@ function render(){
   const wrap = document.getElementById('canvasWrap');
   wrap.innerHTML = '';
 
-  const panels = parseInt(document.getElementById('panelCount').value);
-  const cols = panels===1?1: panels===4?2: panels===6?3: panels===9?3:4;
-  const rows = Math.ceil(panels/cols);
-
-  const panelW = 260, panelH = Math.round(panelW * (sourceImg.height/sourceImg.width));
-
-  const gridEl = document.createElement('div');
-  gridEl.className = 'grid-out';
-  gridEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-  gridEl.style.width = (cols*panelW + (cols-1)*4)+'px';
-
-  for(let i=0;i<panels;i++){
-    const c = document.createElement('canvas');
-    c.width = panelW; c.height = panelH;
-    const colorPair = colorMapState[i] || defaultPalette[i % defaultPalette.length];
-    renderOnePanel(c, colorPair, seed + i*7919);
-    gridEl.appendChild(c);
-  }
-  wrap.appendChild(gridEl);
-  window._lastGrid = gridEl;
-  window._lastPanels = {cols, rows, panelW, panelH, panels};
+  const {w, h} = getStageSize();
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  renderPrint(c, seed);
+  wrap.appendChild(c);
+  window._lastCanvas = c;
 }
 
 function downloadCurrent(){
-  if(!window._lastGrid) return;
-  const {cols, rows, panelW, panelH} = window._lastPanels;
-  const out = document.createElement('canvas');
-  out.width = cols*panelW + (cols-1)*4;
-  out.height = rows*panelH + (rows-1)*4;
-  const octx = out.getContext('2d');
-  octx.fillStyle = '#161513';
-  octx.fillRect(0,0,out.width,out.height);
-  const canvases = window._lastGrid.querySelectorAll('canvas');
-  canvases.forEach((c, i)=>{
-    const col = i % cols, row = Math.floor(i/cols);
-    octx.drawImage(c, col*(panelW+4), row*(panelH+4));
-  });
+  if(!window._lastCanvas) return;
   const link = document.createElement('a');
-  link.download = 'screenprint-edition.png';
-  link.href = out.toDataURL('image/png');
+  link.download = 'screenprint.png';
+  link.href = window._lastCanvas.toDataURL('image/png');
   link.click();
 }
 </script>
