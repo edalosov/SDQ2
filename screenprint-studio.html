@@ -232,6 +232,26 @@
   }
   .dice:hover{border-color:var(--amber); color:var(--amber);}
 
+  /* image preview */
+  #imagePreview{
+    width:100%;
+    height:auto;
+    display:none;
+    border:1px solid var(--line);
+    background:#000;
+    margin-bottom:14px;
+  }
+  #imagePreviewEmpty{
+    color:var(--paper-dim);
+    font-size:10px;
+    text-align:center;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    padding:30px 10px;
+    border:1px dashed var(--line);
+    margin-bottom:14px;
+  }
+
   /* ink pass stack */
   #passRows{margin-bottom:14px;}
   .pass-row{
@@ -356,7 +376,36 @@
       </div>
 
       <div class="panel">
-        <h2>02 — Background</h2>
+        <h2>02 — Image</h2>
+        <div class="panel-hint">Adjust the source photo directly — this is the tone map every ink pass thresholds against. The preview shows exactly what the passes will read.</div>
+        <canvas id="imagePreview"></canvas>
+        <div id="imagePreviewEmpty">Upload an image to preview its tone map.</div>
+        <div class="field">
+          <label>Brightness <b id="imgBrightnessVal">0</b></label>
+          <div class="field-row">
+            <input type="range" id="imgBrightness" min="-100" max="100" value="0">
+            <button type="button" class="dice" data-target="imgBrightness" title="Randomize brightness">🎲</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Contrast <b id="imgContrastVal">0</b></label>
+          <div class="field-row">
+            <input type="range" id="imgContrast" min="-100" max="100" value="0">
+            <button type="button" class="dice" data-target="imgContrast" title="Randomize contrast">🎲</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Blur <b id="imgBlurVal">0px</b></label>
+          <div class="field-row">
+            <input type="range" id="imgBlur" min="0" max="12" value="0">
+            <button type="button" class="dice" data-target="imgBlur" title="Randomize blur">🎲</button>
+          </div>
+        </div>
+        <button class="secondary" id="resetImageBtn">Reset image adjustments</button>
+      </div>
+
+      <div class="panel">
+        <h2>03 — Background</h2>
         <div class="cm-swatch-input">
           <input type="color" id="groundColor" value="#F2D879">
           <input type="text" id="groundColorHex" value="#F2D879" maxlength="7">
@@ -365,7 +414,7 @@
       </div>
 
       <div class="panel">
-        <h2>03 — Ink Passes</h2>
+        <h2>04 — Ink Passes</h2>
         <div class="panel-hint">Each pass captures its own tonal band of the source and gets its own registration drift. Use the arrows to reorder the stack — later passes print on top and win where they overlap.</div>
         <div id="passRows"></div>
         <button class="secondary" id="addPassBtn" style="margin-top:0;">+ Add ink pass</button>
@@ -374,7 +423,7 @@
       </div>
 
       <div class="panel">
-        <h2>04 — Screen Mechanics</h2>
+        <h2>05 — Screen Mechanics</h2>
         <div class="field">
           <label>Edge feather <b id="featherVal">12</b></label>
           <div class="field-row">
@@ -382,27 +431,11 @@
             <button type="button" class="dice" data-target="feather" title="Randomize edge feather">🎲</button>
           </div>
         </div>
-        <div class="field">
-          <label>Grain intensity <b id="grainIntensityVal">0.55</b></label>
-          <div class="field-row">
-            <input type="range" id="grainIntensity" min="0" max="100" value="55">
-            <button type="button" class="dice" data-target="grainIntensity" title="Randomize grain intensity">🎲</button>
-          </div>
-        </div>
-        <div class="field">
-          <label>Grain scale <b id="grainScaleVal">14px</b></label>
-          <div class="field-row">
-            <input type="range" id="grainScale" min="4" max="40" value="14">
-            <button type="button" class="dice" data-target="grainScale" title="Randomize grain scale">🎲</button>
-          </div>
-        </div>
-        <button class="secondary" id="randomizeMechanicsBtn">Randomize all mechanics</button>
       </div>
 
       <div class="panel">
-        <h2>05 — Print</h2>
+        <h2>06 — Print</h2>
         <button class="action" id="renderBtn">Pull the print</button>
-        <button class="secondary" id="reseedBtn">Reseed grain</button>
         <button class="secondary" id="randomizeAllBtn">Randomize everything</button>
         <button class="secondary" id="downloadBtn">Download PNG</button>
       </div>
@@ -418,7 +451,7 @@
   </div>
 
   <footer>
-    Runs entirely in-browser. Nothing uploaded leaves this page. Each pull posterizes the source into one tonal band per ink pass, breaks up coverage with a seeded grain field, and composites the passes bottom-to-top in stack order — with each pass's own registration drift, so overlaps and near-misses come out like a real hand-pulled multi-screen edition.
+    Runs entirely in-browser. Nothing uploaded leaves this page. Brightness, contrast and blur reshape the source photo's own tone map right after upload; each ink pass then posterizes a band of that tone map and the passes composite bottom-to-top in stack order, each with its own registration drift, like a real hand-pulled multi-screen edition.
   </footer>
 </div>
 
@@ -466,6 +499,60 @@ document.getElementById('randomizeBgBtn').addEventListener('click', ()=>{
   const hex = randomVividHex();
   document.getElementById('groundColor').value = hex;
   document.getElementById('groundColorHex').value = hex;
+  scheduleRender();
+});
+
+// ---- Image adjustments (applied directly to the source, right after upload) ----
+function getImageFilter(forPreview){
+  const brightness = 100 + parseInt(document.getElementById('imgBrightness').value);
+  const contrast = 100 + parseInt(document.getElementById('imgContrast').value);
+  const blur = parseInt(document.getElementById('imgBlur').value);
+  let f = `brightness(${brightness}%) contrast(${contrast}%)`;
+  if(blur > 0) f += ` blur(${blur}px)`;
+  if(forPreview) f += ' grayscale(100%)';
+  return f;
+}
+
+function updateImagePreview(){
+  const canvas = document.getElementById('imagePreview');
+  const empty = document.getElementById('imagePreviewEmpty');
+  if(!sourceImg){
+    canvas.style.display = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  canvas.style.display = 'block';
+  const w = 272;
+  const h = Math.round(w * (sourceImg.height/sourceImg.width));
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.filter = getImageFilter(true);
+  ctx.drawImage(sourceImg, 0, 0, w, h);
+}
+
+const imageControlsMap = [
+  ['imgBrightness','imgBrightnessVal', v=>v],
+  ['imgContrast','imgContrastVal', v=>v],
+  ['imgBlur','imgBlurVal', v=>v+'px'],
+];
+imageControlsMap.forEach(([id,labelId,fmt])=>{
+  const el = document.getElementById(id);
+  const label = document.getElementById(labelId);
+  el.addEventListener('input', ()=>{
+    label.textContent = fmt(el.value);
+    updateImagePreview();
+    scheduleRender();
+  });
+});
+document.getElementById('resetImageBtn').addEventListener('click', ()=>{
+  document.getElementById('imgBrightness').value = 0;
+  document.getElementById('imgContrast').value = 0;
+  document.getElementById('imgBlur').value = 0;
+  document.getElementById('imgBrightnessVal').textContent = '0';
+  document.getElementById('imgContrastVal').textContent = '0';
+  document.getElementById('imgBlurVal').textContent = '0px';
+  updateImagePreview();
   scheduleRender();
 });
 
@@ -618,9 +705,8 @@ document.getElementById('randomizeOrderBtn').addEventListener('click', ()=>{
 
 buildPassRows();
 
-// ---- Screen mechanics ----
+// ---- Source image ----
 let sourceImg = null;
-let seed = Math.floor(Math.random()*100000);
 
 const fileInput = document.getElementById('fileInput');
 const uploadText = document.getElementById('uploadText');
@@ -633,6 +719,7 @@ fileInput.addEventListener('change', e=>{
     img.onload = ()=>{
       sourceImg = img;
       uploadText.textContent = f.name + ' loaded — click to replace';
+      updateImagePreview();
       render();
     };
     img.src = ev.target.result;
@@ -640,10 +727,9 @@ fileInput.addEventListener('change', e=>{
   reader.readAsDataURL(f);
 });
 
+// ---- Screen mechanics ----
 const controlsMap = [
   ['feather','featherVal', v=>v],
-  ['grainIntensity','grainIntensityVal', v=>(v/100).toFixed(2)],
-  ['grainScale','grainScaleVal', v=>v+'px'],
 ];
 controlsMap.forEach(([id,labelId,fmt])=>{
   const el = document.getElementById(id);
@@ -661,9 +747,6 @@ function randomizeSlider(id){
 document.querySelectorAll('.dice[data-target]').forEach(btn=>{
   btn.addEventListener('click', ()=> randomizeSlider(btn.dataset.target));
 });
-document.getElementById('randomizeMechanicsBtn').addEventListener('click', ()=>{
-  ['feather','grainIntensity','grainScale'].forEach(randomizeSlider);
-});
 
 document.getElementById('randomizeAllBtn').addEventListener('click', ()=>{
   const hex = randomVividHex();
@@ -679,8 +762,7 @@ document.getElementById('randomizeAllBtn').addEventListener('click', ()=>{
     [inkPasses[i], inkPasses[j]] = [inkPasses[j], inkPasses[i]];
   }
   buildPassRows();
-  ['feather','grainIntensity','grainScale'].forEach(randomizeSlider);
-  seed = Math.floor(Math.random()*100000);
+  ['feather','imgBrightness','imgContrast','imgBlur'].forEach(randomizeSlider);
   scheduleRender();
 });
 
@@ -691,8 +773,7 @@ function scheduleRender(){
   renderTimer = setTimeout(render, 120);
 }
 
-document.getElementById('renderBtn').addEventListener('click', ()=>{ seed = Math.floor(Math.random()*100000); render(); });
-document.getElementById('reseedBtn').addEventListener('click', ()=>{ seed = Math.floor(Math.random()*100000); render(); });
+document.getElementById('renderBtn').addEventListener('click', render);
 document.getElementById('downloadBtn').addEventListener('click', downloadCurrent);
 
 let resizeTimer=null;
@@ -701,19 +782,11 @@ window.addEventListener('resize', ()=>{
   resizeTimer = setTimeout(()=>{ if(sourceImg) render(); }, 200);
 });
 
-function mulberry32(a){
-  return function(){
-    let t = a += 0x6D2B79F5;
-    t = Math.imul(t ^ t >>> 15, t | 1);
-    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  }
-}
-
 function getSourceLuminance(img, w, h){
   const off = document.createElement('canvas');
   off.width = w; off.height = h;
   const octx = off.getContext('2d');
+  octx.filter = getImageFilter(false);
   octx.drawImage(img, 0, 0, w, h);
   const data = octx.getImageData(0,0,w,h).data;
   const lum = new Float32Array(w*h);
@@ -737,50 +810,21 @@ function smoothstep(edge0, edge1, x){
   return t*t*(3-2*t);
 }
 
-// coarse random grid, bilinearly interpolated with smoothstep easing -> soft mottled clouds
-function makeNoiseField(w, h, cellSize, rand){
-  const gw = Math.ceil(w/cellSize)+2;
-  const gh = Math.ceil(h/cellSize)+2;
-  const grid = new Float32Array(gw*gh);
-  for(let i=0;i<grid.length;i++) grid[i] = rand();
-  return function(x, y){
-    const gx = x/cellSize, gy = y/cellSize;
-    const x0 = Math.floor(gx), y0 = Math.floor(gy);
-    const x1 = Math.min(gw-1, x0+1), y1 = Math.min(gh-1, y0+1);
-    const sx = gx-x0, sy = gy-y0;
-    const sxs = sx*sx*(3-2*sx), sys = sy*sy*(3-2*sy);
-    const v00 = grid[y0*gw+x0], v10 = grid[y0*gw+x1];
-    const v01 = grid[y1*gw+x0], v11 = grid[y1*gw+x1];
-    const top = v00*(1-sxs)+v10*sxs;
-    const bot = v01*(1-sxs)+v11*sxs;
-    return top*(1-sys)+bot*sys;
-  };
-}
-
-function renderPrint(canvas, baseSeed){
+function renderPrint(canvas){
   const w = canvas.width, h = canvas.height;
   const ctx = canvas.getContext('2d');
 
   const feather = parseInt(document.getElementById('feather').value)/100;
-  const grainIntensity = parseInt(document.getElementById('grainIntensity').value)/100;
-  const grainScale = parseInt(document.getElementById('grainScale').value);
 
   const bgRGB = hexToRgb(document.getElementById('groundColorHex').value);
   const lum = getSourceLuminance(sourceImg, w, h);
 
-  const rCoarse = mulberry32(baseSeed + 424242);
-  const noiseCoarse = makeNoiseField(w, h, grainScale*3.5, rCoarse);
-
-  const passLayers = inkPasses.map((pass, i) => {
-    const rand = mulberry32(baseSeed + (i+1)*97711 + pass.id*13);
-    return {
-      rgb: hexToRgb(pass.color),
-      threshold: pass.threshold/100,
-      offsetX: pass.offsetX,
-      offsetY: pass.offsetY,
-      noise: makeNoiseField(w, h, grainScale, rand),
-    };
-  });
+  const passLayers = inkPasses.map(pass => ({
+    rgb: hexToRgb(pass.color),
+    threshold: pass.threshold/100,
+    offsetX: pass.offsetX,
+    offsetY: pass.offsetY,
+  }));
 
   const imgData = ctx.createImageData(w, h);
   const data = imgData.data;
@@ -790,7 +834,6 @@ function renderPrint(canvas, baseSeed){
       const idx = y*w+x;
 
       let r = bgRGB[0], g = bgRGB[1], b = bgRGB[2];
-      let totalCoverage = 0;
 
       for(let p=0; p<passLayers.length; p++){
         const layer = passLayers[p];
@@ -799,23 +842,11 @@ function renderPrint(canvas, baseSeed){
         const objectness = 1 - (lum[sy*w+sx]/255);
         const edge0 = Math.max(0, layer.threshold-feather);
         const edge1 = Math.min(1, layer.threshold+feather);
-        const mask = smoothstep(edge0, edge1, objectness);
-        const grain = layer.noise(x, y);
-        let alpha = mask * (1 - grainIntensity*(1-grain));
-        alpha = Math.max(0, Math.min(1, alpha));
+        const alpha = smoothstep(edge0, edge1, objectness);
 
         r += (layer.rgb[0]-r)*alpha;
         g += (layer.rgb[1]-g)*alpha;
         b += (layer.rgb[2]-b)*alpha;
-        if(alpha > totalCoverage) totalCoverage = alpha;
-      }
-
-      if(passLayers.length){
-        const tint = passLayers[passLayers.length-1].rgb;
-        const fleck = Math.max(0, (noiseCoarse(x, y)-0.6)) * 0.35 * (1-totalCoverage);
-        r += (tint[0]-r)*fleck;
-        g += (tint[1]-g)*fleck;
-        b += (tint[2]-b)*fleck;
       }
 
       const px = idx*4;
@@ -844,7 +875,7 @@ function render(){
   const {w, h} = getStageSize();
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
-  renderPrint(c, seed);
+  renderPrint(c);
   wrap.appendChild(c);
   window._lastCanvas = c;
 }
