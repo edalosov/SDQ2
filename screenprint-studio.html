@@ -218,7 +218,7 @@
     align-items:center;
   }
   .field-row input[type=range]{flex:1;}
-  .dice{
+  .dice, .lock{
     flex-shrink:0;
     width:30px;
     height:28px;
@@ -230,7 +230,10 @@
     cursor:pointer;
     padding:0;
   }
-  .dice:hover{border-color:var(--amber); color:var(--amber);}
+  .dice:hover:not(:disabled){border-color:var(--amber); color:var(--amber);}
+  .dice:disabled{opacity:0.3; cursor:default;}
+  .lock:hover{border-color:var(--amber); color:var(--amber);}
+  .lock.locked{border-color:var(--amber); color:var(--amber); background:rgba(217,166,46,0.15);}
 
   /* image preview */
   #imagePreview{
@@ -261,6 +264,7 @@
     margin-top:10px;
   }
   .pass-row:first-child{margin-top:0;}
+  .pass-row.locked{border-color:var(--amber);}
   .pass-row-head{
     display:flex;
     justify-content:space-between;
@@ -288,6 +292,7 @@
   .pass-row-actions button:hover:not(:disabled){border-color:var(--amber); color:var(--amber);}
   .pass-row-actions button.remove:hover:not(:disabled){border-color:var(--rust); color:var(--rust);}
   .pass-row-actions button:disabled{opacity:0.3; cursor:default;}
+  .pass-row-actions button.lock-pass.locked{border-color:var(--amber); color:var(--amber); background:rgba(217,166,46,0.15);}
   .pass-row .field{margin-bottom:8px;}
   .pass-row .field:last-child{margin-bottom:0;}
   .pass-offsets{display:flex; gap:8px;}
@@ -385,6 +390,7 @@
           <div class="field-row">
             <input type="range" id="imgBrightness" min="-100" max="100" value="0">
             <button type="button" class="dice" data-target="imgBrightness" title="Randomize brightness">🎲</button>
+            <button type="button" class="lock" data-target="imgBrightness" title="Lock this value">🔓</button>
           </div>
         </div>
         <div class="field">
@@ -392,6 +398,7 @@
           <div class="field-row">
             <input type="range" id="imgContrast" min="-100" max="100" value="0">
             <button type="button" class="dice" data-target="imgContrast" title="Randomize contrast">🎲</button>
+            <button type="button" class="lock" data-target="imgContrast" title="Lock this value">🔓</button>
           </div>
         </div>
         <div class="field">
@@ -399,6 +406,7 @@
           <div class="field-row">
             <input type="range" id="imgBlur" min="0" max="12" value="0">
             <button type="button" class="dice" data-target="imgBlur" title="Randomize blur">🎲</button>
+            <button type="button" class="lock" data-target="imgBlur" title="Lock this value">🔓</button>
           </div>
         </div>
         <button class="secondary" id="resetImageBtn">Reset image adjustments</button>
@@ -409,6 +417,7 @@
         <div class="cm-swatch-input">
           <input type="color" id="groundColor" value="#F2D879">
           <input type="text" id="groundColorHex" value="#F2D879" maxlength="7">
+          <button type="button" class="lock" data-target="groundColor" title="Lock this value">🔓</button>
         </div>
         <button class="secondary" id="randomizeBgBtn">Randomize background</button>
       </div>
@@ -429,6 +438,7 @@
           <div class="field-row">
             <input type="range" id="feather" min="1" max="40" value="12">
             <button type="button" class="dice" data-target="feather" title="Randomize edge feather">🎲</button>
+            <button type="button" class="lock" data-target="feather" title="Lock this value">🔓</button>
           </div>
         </div>
       </div>
@@ -497,7 +507,33 @@ function randInt(min, max){
 bindColorHex(document.getElementById('groundColor'), document.getElementById('groundColorHex'), scheduleRenderSafe);
 function scheduleRenderSafe(){ if(typeof scheduleRender === 'function') scheduleRender(); }
 
+// ---- Locks: protect a value from any randomize button ----
+const locks = {};
+function isLocked(id){ return !!locks[id]; }
+function initLockButtons(){
+  document.querySelectorAll('.lock[data-target]').forEach(btn=>{
+    const id = btn.dataset.target;
+    locks[id] = false;
+    const refresh = ()=>{
+      const locked = locks[id];
+      btn.textContent = locked ? '🔒' : '🔓';
+      btn.classList.toggle('locked', locked);
+      btn.title = locked ? 'Locked — click to unlock' : 'Click to lock this value';
+      const dice = document.querySelector(`.dice[data-target="${id}"]`);
+      if(dice) dice.disabled = locked;
+      if(id === 'groundColor'){
+        const rbtn = document.getElementById('randomizeBgBtn');
+        if(rbtn) rbtn.disabled = locked;
+      }
+    };
+    btn.addEventListener('click', ()=>{ locks[id] = !locks[id]; refresh(); });
+    refresh();
+  });
+}
+initLockButtons();
+
 document.getElementById('randomizeBgBtn').addEventListener('click', ()=>{
+  if(isLocked('groundColor')) return;
   const hex = randomVividHex();
   document.getElementById('groundColor').value = hex;
   document.getElementById('groundColorHex').value = hex;
@@ -567,7 +603,19 @@ function randomPassParams(){
     threshold: randInt(15, 85),
     offsetX: randInt(-18, 18),
     offsetY: randInt(-18, 18),
+    locked: false,
   };
+}
+
+function shuffleUnlockedPasses(){
+  const unlockedIndices = [];
+  inkPasses.forEach((p, i)=>{ if(!p.locked) unlockedIndices.push(i); });
+  const values = unlockedIndices.map(i => inkPasses[i]);
+  for(let i = values.length-1; i>0; i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [values[i], values[j]] = [values[j], values[i]];
+  }
+  unlockedIndices.forEach((idx, k)=>{ inkPasses[idx] = values[k]; });
 }
 
 let inkPasses = [
@@ -586,15 +634,16 @@ function buildPassRows(){
       : `layer ${i+1} of ${inkPasses.length}`;
 
     const row = document.createElement('div');
-    row.className = 'pass-row';
+    row.className = 'pass-row' + (pass.locked ? ' locked' : '');
     row.dataset.id = pass.id;
     row.innerHTML = `
       <div class="pass-row-head">
         <div class="pass-row-title">${posLabel}</div>
         <div class="pass-row-actions">
+          <button type="button" class="lock-pass${pass.locked ? ' locked' : ''}" title="${pass.locked ? 'Locked — click to unlock' : 'Lock this pass'}">${pass.locked ? '🔒' : '🔓'}</button>
           <button type="button" class="move-up" title="Move up (print later)" ${i===0 ? 'disabled' : ''}>▲</button>
           <button type="button" class="move-down" title="Move down (print earlier)" ${i===inkPasses.length-1 ? 'disabled' : ''}>▼</button>
-          <button type="button" class="dice-pass" title="Randomize this pass">🎲</button>
+          <button type="button" class="dice-pass" title="Randomize this pass" ${pass.locked ? 'disabled' : ''}>🎲</button>
           <button type="button" class="remove" title="Remove this pass" ${inkPasses.length<=1 ? 'disabled' : ''}>✕</button>
         </div>
       </div>
@@ -650,11 +699,17 @@ function buildPassRows(){
     });
 
     row.querySelector('.dice-pass').addEventListener('click', ()=>{
+      if(pass.locked) return;
       const fresh = randomPassParams();
       pass.color = fresh.color; pass.threshold = fresh.threshold;
       pass.offsetX = fresh.offsetX; pass.offsetY = fresh.offsetY;
       buildPassRows();
       scheduleRender();
+    });
+
+    row.querySelector('.lock-pass').addEventListener('click', ()=>{
+      pass.locked = !pass.locked;
+      buildPassRows();
     });
 
     row.querySelector('.remove').addEventListener('click', ()=>{
@@ -689,6 +744,7 @@ document.getElementById('addPassBtn').addEventListener('click', ()=>{
 });
 document.getElementById('randomizePassesBtn').addEventListener('click', ()=>{
   inkPasses.forEach(pass=>{
+    if(pass.locked) return;
     const fresh = randomPassParams();
     pass.color = fresh.color; pass.threshold = fresh.threshold;
     pass.offsetX = fresh.offsetX; pass.offsetY = fresh.offsetY;
@@ -697,10 +753,7 @@ document.getElementById('randomizePassesBtn').addEventListener('click', ()=>{
   scheduleRender();
 });
 document.getElementById('randomizeOrderBtn').addEventListener('click', ()=>{
-  for(let i = inkPasses.length-1; i>0; i--){
-    const j = Math.floor(Math.random()*(i+1));
-    [inkPasses[i], inkPasses[j]] = [inkPasses[j], inkPasses[i]];
-  }
+  shuffleUnlockedPasses();
   buildPassRows();
   scheduleRender();
 });
@@ -740,6 +793,7 @@ controlsMap.forEach(([id,labelId,fmt])=>{
 });
 
 function randomizeSlider(id){
+  if(isLocked(id)) return;
   const el = document.getElementById(id);
   const min = parseInt(el.min), max = parseInt(el.max);
   const val = randInt(min, max);
@@ -751,18 +805,18 @@ document.querySelectorAll('.dice[data-target]').forEach(btn=>{
 });
 
 document.getElementById('randomizeAllBtn').addEventListener('click', ()=>{
-  const hex = randomVividHex();
-  document.getElementById('groundColor').value = hex;
-  document.getElementById('groundColorHex').value = hex;
+  if(!isLocked('groundColor')){
+    const hex = randomVividHex();
+    document.getElementById('groundColor').value = hex;
+    document.getElementById('groundColorHex').value = hex;
+  }
   inkPasses.forEach(pass=>{
+    if(pass.locked) return;
     const fresh = randomPassParams();
     pass.color = fresh.color; pass.threshold = fresh.threshold;
     pass.offsetX = fresh.offsetX; pass.offsetY = fresh.offsetY;
   });
-  for(let i = inkPasses.length-1; i>0; i--){
-    const j = Math.floor(Math.random()*(i+1));
-    [inkPasses[i], inkPasses[j]] = [inkPasses[j], inkPasses[i]];
-  }
+  shuffleUnlockedPasses();
   buildPassRows();
   ['feather','imgBrightness','imgContrast','imgBlur'].forEach(randomizeSlider);
   scheduleRender();
