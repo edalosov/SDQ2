@@ -25,7 +25,7 @@
     min-height:100vh;
   }
   .frame{
-    max-width:1600px;
+    max-width:1900px;
     margin:0 auto;
     padding:28px 24px 60px;
   }
@@ -67,8 +67,12 @@
 
   .layout{
     display:grid;
-    grid-template-columns:320px 1fr;
+    grid-template-columns:320px 1fr 320px;
     gap:24px;
+  }
+  @media (max-width:1400px){
+    .layout{grid-template-columns:320px 1fr;}
+    .controls-right{grid-column:1 / -1;}
   }
   @media (max-width:880px){
     .layout{grid-template-columns:1fr;}
@@ -414,7 +418,7 @@
   </header>
 
   <div class="layout">
-    <div class="controls">
+    <div class="controls controls-left">
 
       <div class="panel">
         <h2>01 — Source</h2>
@@ -466,6 +470,17 @@
         <button class="secondary" id="randomizeBgBtn">Randomize background</button>
       </div>
 
+    </div>
+
+    <div class="stage">
+      <div class="stage-label">Proof</div>
+      <div class="canvas-wrap" id="canvasWrap">
+        <div id="empty">Load a source image, then pull a print.</div>
+      </div>
+    </div>
+
+    <div class="controls controls-right">
+
       <div class="panel">
         <h2>04 — Ink Passes</h2>
         <div class="panel-hint">Each pass captures its own tonal band of the source and gets its own registration drift. Use the arrows to reorder the stack — later passes print on top and win where they overlap.</div>
@@ -498,13 +513,6 @@
         <button class="secondary" id="saveLookBtn" style="margin-top:0;">💾 Save this look</button>
       </div>
 
-    </div>
-
-    <div class="stage">
-      <div class="stage-label">Proof</div>
-      <div class="canvas-wrap" id="canvasWrap">
-        <div id="empty">Load a source image, then pull a print.</div>
-      </div>
     </div>
   </div>
 
