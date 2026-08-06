@@ -438,7 +438,7 @@
         <button class="action" id="renderBtn">Pull the print</button>
         <button class="secondary" id="randomizeAllBtn">Randomize everything</button>
         <button class="secondary" id="downloadBtn">Download PNG</button>
-        <div class="panel-hint" style="margin-top:14px;">To actually screenprint this: exports one black/white film per ink pass (black = ink, white = blocked) with shared registration marks, plus a recipe file with colours, order and settings.</div>
+        <div class="panel-hint" style="margin-top:14px;">To actually screenprint this: exports one black/white film per ink pass (black = ink, white = blocked) with shared registration marks, plus a recipe file with colours, order and settings. Films render at up to 4000px on the long edge at 300 DPI, capped to your source photo's native resolution.</div>
         <button class="secondary" id="downloadKitBtn" style="margin-top:0;">Download print kit (.zip)</button>
       </div>
 
@@ -913,6 +913,27 @@ function canvasToPngBytes(canvas){
   });
 }
 
+function beU32(n){ return new Uint8Array([(n>>>24)&0xFF, (n>>>16)&0xFF, (n>>>8)&0xFF, n&0xFF]); }
+
+// Canvas-exported PNGs carry no physical resolution, so print/design software
+// falls back to 72-96dpi and the file opens at the wrong physical size. Splice
+// in a pHYs chunk (right after IHDR, per the PNG spec) so it opens at 300dpi.
+function addPngDpi(bytes, dpi){
+  const pxPerMeter = Math.round(dpi / 0.0254);
+  const typeBytes = new TextEncoder().encode('pHYs');
+  const dataBytes = concatBytes([beU32(pxPerMeter), beU32(pxPerMeter), new Uint8Array([1])]);
+  const crcBytes = beU32(crc32(concatBytes([typeBytes, dataBytes])));
+  const physChunk = concatBytes([beU32(dataBytes.length), typeBytes, dataBytes, crcBytes]);
+
+  const ihdrLength = (bytes[8]<<24 | bytes[9]<<16 | bytes[10]<<8 | bytes[11]) >>> 0;
+  const insertPos = 8 + 4 + 4 + ihdrLength + 4; // signature + IHDR(length+type+data+crc)
+  return concatBytes([bytes.subarray(0, insertPos), physChunk, bytes.subarray(insertPos)]);
+}
+
+async function canvasToPngBytesAt300dpi(canvas){
+  return addPngDpi(await canvasToPngBytes(canvas), 300);
+}
+
 let _crc32Table = null;
 function crc32(buf){
   if(!_crc32Table){
@@ -989,10 +1010,13 @@ async function downloadPrintKit(){
   btn.disabled = true;
 
   try{
-    const longEdge = 2000;
+    const targetLongEdge = 4000;
+    const sourceLongEdge = Math.max(sourceImg.width, sourceImg.height);
+    const longEdge = Math.min(targetLongEdge, sourceLongEdge);
     const ratio = sourceImg.width / sourceImg.height;
     const w = ratio >= 1 ? longEdge : Math.round(longEdge*ratio);
     const h = ratio >= 1 ? Math.round(longEdge/ratio) : longEdge;
+    const dpi = 300;
 
     const lum = getSourceLuminance(sourceImg, w, h);
     const bgHex = document.getElementById('groundColorHex').value.toUpperCase();
@@ -1001,7 +1025,7 @@ async function downloadPrintKit(){
     const proofCanvas = document.createElement('canvas');
     proofCanvas.width = w; proofCanvas.height = h;
     renderPrint(proofCanvas);
-    files.push({name:'proof.png', data: await canvasToPngBytes(proofCanvas)});
+    files.push({name:'proof.png', data: await canvasToPngBytesAt300dpi(proofCanvas)});
 
     const groundCanvas = document.createElement('canvas');
     groundCanvas.width = w; groundCanvas.height = h;
@@ -1009,7 +1033,7 @@ async function downloadPrintKit(){
     gctx.fillStyle = '#000';
     gctx.fillRect(0, 0, w, h);
     drawRegMarks(gctx, w, h, '#fff');
-    files.push({name:'film-00-ground-flood.png', data: await canvasToPngBytes(groundCanvas)});
+    files.push({name:'film-00-ground-flood.png', data: await canvasToPngBytesAt300dpi(groundCanvas)});
 
     for(let i=0; i<inkPasses.length; i++){
       const pass = inkPasses[i];
@@ -1033,14 +1057,17 @@ async function downloadPrintKit(){
       drawRegMarks(ctx, w, h, '#000');
       const num = String(i+1).padStart(2, '0');
       const slug = passSlug(i, inkPasses.length);
-      files.push({name:`film-${num}-${slug}-${pass.color.replace('#','')}.png`, data: await canvasToPngBytes(c)});
+      files.push({name:`film-${num}-${slug}-${pass.color.replace('#','')}.png`, data: await canvasToPngBytesAt300dpi(c)});
     }
 
     const lines = [];
     lines.push('SCREENPRINT STUDIO — PRINT RECIPE');
     lines.push(new Date().toString());
     lines.push('');
-    lines.push(`Film size: ${w} x ${h} px — keep every film at this exact scale so the registration marks line up.`);
+    lines.push(`Film size: ${w} x ${h} px at ${dpi} DPI (${(w/dpi).toFixed(2)} x ${(h/dpi).toFixed(2)} in) — keep every film at this exact scale so the registration marks line up.`);
+    if(longEdge < targetLongEdge){
+      lines.push(`Capped to your source image's native resolution (${sourceImg.width} x ${sourceImg.height} px) — upload a higher-resolution photo for a larger physical print size.`);
+    }
     lines.push('');
     lines.push('BACKGROUND / SUBSTRATE');
     lines.push(`  On-screen colour: ${bgHex}`);
