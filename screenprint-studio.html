@@ -468,6 +468,35 @@
           <button type="button" class="lock" data-target="groundColor" title="Lock this value">🔓</button>
         </div>
         <button class="secondary" id="randomizeBgBtn">Randomize background</button>
+
+        <button class="secondary" id="splitBgToggle">+ Split background into two colours</button>
+        <div id="splitBgControls" style="display:none;">
+          <div class="field" style="margin-top:14px;">
+            <div class="cm-color-title">Second colour</div>
+            <div class="cm-swatch-input">
+              <input type="color" id="groundColor2" value="#2A4E82">
+              <input type="text" id="groundColor2Hex" value="#2A4E82" maxlength="7">
+              <button type="button" class="lock" data-target="groundColor2" title="Lock this value">🔓</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Split angle <b id="splitAngleVal">0°</b></label>
+            <div class="field-row">
+              <input type="range" id="splitAngle" min="-90" max="90" value="0">
+              <button type="button" class="dice" data-target="splitAngle" title="Randomize split angle">🎲</button>
+              <button type="button" class="lock" data-target="splitAngle" title="Lock this value">🔓</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Split position <b id="splitPositionVal">50%</b></label>
+            <div class="field-row">
+              <input type="range" id="splitPosition" min="0" max="100" value="50">
+              <button type="button" class="dice" data-target="splitPosition" title="Randomize split position">🎲</button>
+              <button type="button" class="lock" data-target="splitPosition" title="Lock this value">🔓</button>
+            </div>
+          </div>
+          <button class="secondary" id="removeSplitBtn" style="margin-top:0;">Remove split (single colour)</button>
+        </div>
       </div>
 
     </div>
@@ -566,7 +595,36 @@ function randInt(min, max){
 }
 
 bindColorHex(document.getElementById('groundColor'), document.getElementById('groundColorHex'), scheduleRenderSafe);
+bindColorHex(document.getElementById('groundColor2'), document.getElementById('groundColor2Hex'), scheduleRenderSafe);
 function scheduleRenderSafe(){ if(typeof scheduleRender === 'function') scheduleRender(); }
+
+// ---- Split background: two flat colours divided by a straight, smooth-edged line ----
+let splitBgEnabled = false;
+function setSplitBgEnabled(on){
+  splitBgEnabled = on;
+  document.getElementById('splitBgControls').style.display = on ? 'block' : 'none';
+  document.getElementById('splitBgToggle').style.display = on ? 'none' : 'block';
+  scheduleRender();
+}
+document.getElementById('splitBgToggle').addEventListener('click', ()=> setSplitBgEnabled(true));
+document.getElementById('removeSplitBtn').addEventListener('click', ()=> setSplitBgEnabled(false));
+
+// nx,ny,d describe the dividing line as a projection cutoff; feather keeps the edge
+// crisp but anti-aliased rather than a jagged hard pixel edge.
+function computeSplitParams(w, h, angleDeg, posPercent){
+  const theta = angleDeg * Math.PI/180;
+  const nx = Math.cos(theta), ny = Math.sin(theta);
+  const corners = [[0,0],[w,0],[0,h],[w,h]];
+  let min = Infinity, max = -Infinity;
+  corners.forEach(([cx,cy])=>{
+    const p = cx*nx + cy*ny;
+    if(p < min) min = p;
+    if(p > max) max = p;
+  });
+  const d = min + (max-min)*(posPercent/100);
+  const feather = Math.max(1, w*0.0025);
+  return {nx, ny, d, feather};
+}
 
 // ---- Locks: protect a value from any randomize button ----
 const locks = {};
@@ -594,10 +652,16 @@ function initLockButtons(){
 initLockButtons();
 
 document.getElementById('randomizeBgBtn').addEventListener('click', ()=>{
-  if(isLocked('groundColor')) return;
-  const hex = randomVividHex();
-  document.getElementById('groundColor').value = hex;
-  document.getElementById('groundColorHex').value = hex;
+  if(!isLocked('groundColor')){
+    const hex = randomVividHex();
+    document.getElementById('groundColor').value = hex;
+    document.getElementById('groundColorHex').value = hex;
+  }
+  if(splitBgEnabled && !isLocked('groundColor2')){
+    const hex2 = randomVividHex();
+    document.getElementById('groundColor2').value = hex2;
+    document.getElementById('groundColor2Hex').value = hex2;
+  }
   scheduleRender();
 });
 
@@ -680,9 +744,7 @@ function shuffleUnlockedPasses(){
 }
 
 let inkPasses = [
-  Object.assign(randomPassParams(), {color:'#4FA8C9', threshold:32, offsetX:0, offsetY:0}),
-  Object.assign(randomPassParams(), {color:'#7A1F4B', threshold:55, offsetX:6, offsetY:0}),
-  Object.assign(randomPassParams(), {color:'#1A1A1A', threshold:76, offsetX:-4, offsetY:2}),
+  Object.assign(randomPassParams(), {color:'#1E2A83', threshold:50, offsetX:0, offsetY:0}),
 ];
 
 function buildPassRows(){
@@ -846,6 +908,8 @@ fileInput.addEventListener('change', e=>{
 // ---- Screen mechanics ----
 const controlsMap = [
   ['feather','featherVal', v=>v],
+  ['splitAngle','splitAngleVal', v=>v+'°'],
+  ['splitPosition','splitPositionVal', v=>v+'%'],
 ];
 controlsMap.forEach(([id,labelId,fmt])=>{
   const el = document.getElementById(id);
@@ -871,6 +935,11 @@ document.getElementById('randomizeAllBtn').addEventListener('click', ()=>{
     document.getElementById('groundColor').value = hex;
     document.getElementById('groundColorHex').value = hex;
   }
+  if(splitBgEnabled && !isLocked('groundColor2')){
+    const hex2 = randomVividHex();
+    document.getElementById('groundColor2').value = hex2;
+    document.getElementById('groundColor2Hex').value = hex2;
+  }
   inkPasses.forEach(pass=>{
     if(pass.locked) return;
     const fresh = randomPassParams();
@@ -879,7 +948,7 @@ document.getElementById('randomizeAllBtn').addEventListener('click', ()=>{
   });
   shuffleUnlockedPasses();
   buildPassRows();
-  ['feather','imgBrightness','imgContrast','imgBlur'].forEach(randomizeSlider);
+  ['feather','imgBrightness','imgContrast','imgBlur','splitAngle','splitPosition'].forEach(randomizeSlider);
   scheduleRender();
 });
 
@@ -933,7 +1002,14 @@ function renderPrint(canvas){
 
   const feather = parseInt(document.getElementById('feather').value)/100;
 
-  const bgRGB = hexToRgb(document.getElementById('groundColorHex').value);
+  const bgRGB1 = hexToRgb(document.getElementById('groundColorHex').value);
+  let bgRGB2 = bgRGB1, split = null;
+  if(splitBgEnabled){
+    bgRGB2 = hexToRgb(document.getElementById('groundColor2Hex').value);
+    const angle = parseInt(document.getElementById('splitAngle').value);
+    const pos = parseInt(document.getElementById('splitPosition').value);
+    split = computeSplitParams(w, h, angle, pos);
+  }
   const lum = getSourceLuminance(sourceImg, w, h);
 
   const passLayers = inkPasses.map(pass => ({
@@ -950,7 +1026,17 @@ function renderPrint(canvas){
     for(let x=0; x<w; x++){
       const idx = y*w+x;
 
-      let r = bgRGB[0], g = bgRGB[1], b = bgRGB[2];
+      let r, g, b;
+      if(split){
+        let t = (x*split.nx + y*split.ny - (split.d - split.feather)) / (2*split.feather);
+        t = Math.max(0, Math.min(1, t));
+        t = t*t*(3-2*t);
+        r = bgRGB1[0] + (bgRGB2[0]-bgRGB1[0])*t;
+        g = bgRGB1[1] + (bgRGB2[1]-bgRGB1[1])*t;
+        b = bgRGB1[2] + (bgRGB2[2]-bgRGB1[2])*t;
+      } else {
+        r = bgRGB1[0]; g = bgRGB1[1]; b = bgRGB1[2];
+      }
 
       for(let p=0; p<passLayers.length; p++){
         const layer = passLayers[p];
@@ -1029,6 +1115,10 @@ function persistSavedLooks(){
 function captureConfig(){
   return {
     bg: document.getElementById('groundColorHex').value,
+    splitEnabled: splitBgEnabled,
+    bg2: document.getElementById('groundColor2Hex').value,
+    splitAngle: parseInt(document.getElementById('splitAngle').value),
+    splitPosition: parseInt(document.getElementById('splitPosition').value),
     feather: parseInt(document.getElementById('feather').value),
     brightness: parseInt(document.getElementById('imgBrightness').value),
     contrast: parseInt(document.getElementById('imgContrast').value),
@@ -1040,6 +1130,20 @@ function captureConfig(){
 function applyConfig(cfg){
   document.getElementById('groundColor').value = cfg.bg;
   document.getElementById('groundColorHex').value = cfg.bg;
+
+  if(cfg.bg2){
+    document.getElementById('groundColor2').value = cfg.bg2;
+    document.getElementById('groundColor2Hex').value = cfg.bg2;
+  }
+  if(typeof cfg.splitAngle === 'number'){
+    document.getElementById('splitAngle').value = cfg.splitAngle;
+    document.getElementById('splitAngleVal').textContent = cfg.splitAngle+'°';
+  }
+  if(typeof cfg.splitPosition === 'number'){
+    document.getElementById('splitPosition').value = cfg.splitPosition;
+    document.getElementById('splitPositionVal').textContent = cfg.splitPosition+'%';
+  }
+  setSplitBgEnabled(!!cfg.splitEnabled);
 
   document.getElementById('feather').value = cfg.feather;
   document.getElementById('featherVal').textContent = cfg.feather;
@@ -1118,17 +1222,23 @@ loadSavedLooks();
 renderSavedGrid();
 
 // ---- Print kit: one black/white film per ink pass, for actually burning screens ----
-function drawRegMarks(ctx, w, h, color){
-  ctx.strokeStyle = color;
-  ctx.lineWidth = Math.max(1, Math.round(w/500));
+// Halo + core stroke so marks stay visible whether they land on a black or
+// white region of the film (matters once a film can have both, like a split
+// background film).
+function drawRegMarks(ctx, w, h){
+  const lw = Math.max(1, Math.round(w/500));
   const len = Math.max(10, Math.round(w*0.018));
   const margin = Math.max(16, Math.round(w*0.03));
   const corners = [[margin,margin],[w-margin,margin],[margin,h-margin],[w-margin,h-margin]];
-  corners.forEach(([cx,cy])=>{
-    ctx.beginPath();
-    ctx.moveTo(cx-len, cy); ctx.lineTo(cx+len, cy);
-    ctx.moveTo(cx, cy-len); ctx.lineTo(cx, cy+len);
-    ctx.stroke();
+  [['#fff', lw*3], ['#000', lw]].forEach(([color, width])=>{
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    corners.forEach(([cx,cy])=>{
+      ctx.beginPath();
+      ctx.moveTo(cx-len, cy); ctx.lineTo(cx+len, cy);
+      ctx.moveTo(cx, cy-len); ctx.lineTo(cx, cy+len);
+      ctx.stroke();
+    });
   });
 }
 
@@ -1247,6 +1357,9 @@ async function downloadPrintKit(){
 
     const lum = getSourceLuminance(sourceImg, w, h);
     const bgHex = document.getElementById('groundColorHex').value.toUpperCase();
+    const bgHex2 = document.getElementById('groundColor2Hex').value.toUpperCase();
+    const splitAngle = parseInt(document.getElementById('splitAngle').value);
+    const splitPosition = parseInt(document.getElementById('splitPosition').value);
     const files = [];
 
     const proofCanvas = document.createElement('canvas');
@@ -1254,13 +1367,40 @@ async function downloadPrintKit(){
     renderPrint(proofCanvas);
     files.push({name:'proof.png', data: await canvasToPngBytesAt300dpi(proofCanvas)});
 
-    const groundCanvas = document.createElement('canvas');
-    groundCanvas.width = w; groundCanvas.height = h;
-    const gctx = groundCanvas.getContext('2d');
-    gctx.fillStyle = '#000';
-    gctx.fillRect(0, 0, w, h);
-    drawRegMarks(gctx, w, h, '#fff');
-    files.push({name:'film-00-ground-flood.png', data: await canvasToPngBytesAt300dpi(groundCanvas)});
+    if(splitBgEnabled){
+      const sp = computeSplitParams(w, h, splitAngle, splitPosition);
+      const sides = [
+        {name: 'film-00a-ground-A.png', sideB: false},
+        {name: 'film-00b-ground-B.png', sideB: true},
+      ];
+      for(const side of sides){
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const ctx = c.getContext('2d');
+        const imgData = ctx.createImageData(w, h);
+        const data = imgData.data;
+        for(let y=0; y<h; y++){
+          for(let x=0; x<w; x++){
+            const proj = x*sp.nx + y*sp.ny;
+            const onSideB = proj >= sp.d;
+            const v = (onSideB === side.sideB) ? 0 : 255;
+            const idx = (y*w+x)*4;
+            data[idx] = v; data[idx+1] = v; data[idx+2] = v; data[idx+3] = 255;
+          }
+        }
+        ctx.putImageData(imgData, 0, 0);
+        drawRegMarks(ctx, w, h);
+        files.push({name: side.name, data: await canvasToPngBytesAt300dpi(c)});
+      }
+    } else {
+      const groundCanvas = document.createElement('canvas');
+      groundCanvas.width = w; groundCanvas.height = h;
+      const gctx = groundCanvas.getContext('2d');
+      gctx.fillStyle = '#000';
+      gctx.fillRect(0, 0, w, h);
+      drawRegMarks(gctx, w, h);
+      files.push({name:'film-00-ground-flood.png', data: await canvasToPngBytesAt300dpi(groundCanvas)});
+    }
 
     for(let i=0; i<inkPasses.length; i++){
       const pass = inkPasses[i];
@@ -1281,7 +1421,7 @@ async function downloadPrintKit(){
         }
       }
       ctx.putImageData(imgData, 0, 0);
-      drawRegMarks(ctx, w, h, '#000');
+      drawRegMarks(ctx, w, h);
       const num = String(i+1).padStart(2, '0');
       const slug = passSlug(i, inkPasses.length);
       files.push({name:`film-${num}-${slug}-${pass.color.replace('#','')}.png`, data: await canvasToPngBytesAt300dpi(c)});
@@ -1297,9 +1437,16 @@ async function downloadPrintKit(){
     }
     lines.push('');
     lines.push('BACKGROUND / SUBSTRATE');
-    lines.push(`  On-screen colour: ${bgHex}`);
-    lines.push('  If printing on blank stock, print film-00-ground-flood.png first as a full flood coat.');
-    lines.push('  If your stock is already this colour, skip the flood coat and print straight onto it.');
+    if(splitBgEnabled){
+      lines.push(`  Split into two flat colours divided by a straight line at ${splitAngle}°, position ${splitPosition}%.`);
+      lines.push(`  Colour A (film-00a-ground-A.png): ${bgHex}`);
+      lines.push(`  Colour B (film-00b-ground-B.png): ${bgHex2}`);
+      lines.push('  Print both as full flood coats using their own screen — each film is masked to only its half, and both share the same registration marks, so the two colours should meet cleanly along the line once aligned.');
+    } else {
+      lines.push(`  On-screen colour: ${bgHex}`);
+      lines.push('  If printing on blank stock, print film-00-ground-flood.png first as a full flood coat.');
+      lines.push('  If your stock is already this colour, skip the flood coat and print straight onto it.');
+    }
     lines.push('');
     lines.push('INK PASSES — print in this exact order (01 first). Later passes print on top and cover earlier ones where they overlap.');
     inkPasses.forEach((pass, i)=>{
