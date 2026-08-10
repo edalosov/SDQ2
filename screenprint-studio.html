@@ -239,6 +239,17 @@
   .lock:hover{border-color:var(--amber); color:var(--amber);}
   .lock.locked{border-color:var(--amber); color:var(--amber); background:rgba(217,166,46,0.15);}
 
+  .bg-mode-btn.active{border-color:var(--amber); color:var(--amber); background:rgba(217,166,46,0.15);}
+  #bgMaskCanvas{
+    width:100%;
+    height:auto;
+    display:block;
+    border:1px solid var(--line);
+    background:#000;
+    cursor:crosshair;
+    touch-action:none;
+  }
+
   /* image preview */
   #imagePreview{
     width:100%;
@@ -299,8 +310,7 @@
   .pass-row-actions button.lock-pass.locked{border-color:var(--amber); color:var(--amber); background:rgba(217,166,46,0.15);}
   .pass-row .field{margin-bottom:8px;}
   .pass-row .field:last-child{margin-bottom:0;}
-  .pass-offsets{display:flex; gap:8px;}
-  .pass-offsets .field{flex:1;}
+  .pass-row .cm-swatch-input .lock{width:26px; height:26px;}
 
   .stage{
     border:1px solid var(--line);
@@ -449,14 +459,6 @@
             <button type="button" class="lock" data-target="imgContrast" title="Lock this value">🔓</button>
           </div>
         </div>
-        <div class="field">
-          <label>Blur <b id="imgBlurVal">0px</b></label>
-          <div class="field-row">
-            <input type="range" id="imgBlur" min="0" max="12" value="0">
-            <button type="button" class="dice" data-target="imgBlur" title="Randomize blur">🎲</button>
-            <button type="button" class="lock" data-target="imgBlur" title="Lock this value">🔓</button>
-          </div>
-        </div>
         <button class="secondary" id="resetImageBtn">Reset image adjustments</button>
       </div>
 
@@ -479,6 +481,28 @@
               <button type="button" class="lock" data-target="groundColor2" title="Lock this value">🔓</button>
             </div>
           </div>
+
+          <div class="field">
+            <div class="cm-color-title">Second colour shape</div>
+            <div class="cm-pair">
+              <button type="button" class="secondary bg-mode-btn active" data-mode="line" style="margin-top:0;">Straight line</button>
+              <button type="button" class="secondary bg-mode-btn" data-mode="draw" style="margin-top:0;">Draw shape</button>
+            </div>
+          </div>
+
+          <div id="bgDrawControls" style="display:none;">
+            <div class="panel-hint">Draw on the canvas below — wherever you paint becomes the second colour. Split angle/position (below) rotate and shift your drawing.</div>
+            <canvas id="bgMaskCanvas" width="272" height="204"></canvas>
+            <div class="field" style="margin-top:10px;">
+              <label>Brush size <b id="bgBrushSizeVal">18px</b></label>
+              <input type="range" id="bgBrushSize" min="4" max="60" value="18">
+            </div>
+            <div class="cm-pair">
+              <button type="button" class="secondary" id="bgMaskClearBtn" style="margin-top:0;">Clear drawing</button>
+              <button type="button" class="secondary" id="bgMaskInvertBtn" style="margin-top:0;">Invert</button>
+            </div>
+          </div>
+
           <div class="field">
             <label>Split angle <b id="splitAngleVal">0°</b></label>
             <div class="field-row">
@@ -553,7 +577,7 @@
   </div>
 
   <footer>
-    Runs entirely in-browser. Nothing uploaded leaves this page. Brightness, contrast and blur reshape the source photo's own tone map right after upload; each ink pass then posterizes a band of that tone map and the passes composite bottom-to-top in stack order, each with its own registration drift, like a real hand-pulled multi-screen edition.
+    Runs entirely in-browser. Nothing uploaded leaves this page. Brightness and contrast reshape the source photo's own tone map right after upload; each ink pass then posterizes a band of that tone map and the passes composite bottom-to-top in stack order, each with its own registration drift, like a real hand-pulled multi-screen edition.
   </footer>
 </div>
 
@@ -626,6 +650,113 @@ function computeSplitParams(w, h, angleDeg, posPercent){
   return {nx, ny, d, feather};
 }
 
+// ---- Second-colour shape: either the straight line above, or a hand-drawn mask ----
+let bgSplitMode = 'line';
+document.querySelectorAll('.bg-mode-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    bgSplitMode = btn.dataset.mode;
+    document.querySelectorAll('.bg-mode-btn').forEach(b => b.classList.toggle('active', b===btn));
+    document.getElementById('bgDrawControls').style.display = bgSplitMode==='draw' ? 'block' : 'none';
+    scheduleRender();
+  });
+});
+
+function initBgMaskDrawing(){
+  const canvas = document.getElementById('bgMaskCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  let drawing = false;
+  function localPos(e){
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX-rect.left) * (canvas.width/rect.width),
+      y: (e.clientY-rect.top) * (canvas.height/rect.height),
+    };
+  }
+  function paintAt(x, y){
+    const size = parseInt(document.getElementById('bgBrushSize').value);
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(x, y, size/2, 0, Math.PI*2);
+    ctx.fill();
+  }
+  canvas.addEventListener('pointerdown', e=>{
+    drawing = true;
+    canvas.setPointerCapture(e.pointerId);
+    const p = localPos(e);
+    paintAt(p.x, p.y);
+    scheduleRender();
+  });
+  canvas.addEventListener('pointermove', e=>{
+    if(!drawing) return;
+    const p = localPos(e);
+    paintAt(p.x, p.y);
+    scheduleRender();
+  });
+  canvas.addEventListener('pointerup', ()=>{ drawing = false; });
+  canvas.addEventListener('pointercancel', ()=>{ drawing = false; });
+
+  document.getElementById('bgBrushSize').addEventListener('input', ()=>{
+    document.getElementById('bgBrushSizeVal').textContent = document.getElementById('bgBrushSize').value+'px';
+  });
+  document.getElementById('bgMaskClearBtn').addEventListener('click', ()=>{
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    scheduleRender();
+  });
+  document.getElementById('bgMaskInvertBtn').addEventListener('click', ()=>{
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    for(let i=0; i<img.data.length; i+=4){
+      const v = 255-img.data[i];
+      img.data[i] = v; img.data[i+1] = v; img.data[i+2] = v;
+    }
+    ctx.putImageData(img, 0, 0);
+    scheduleRender();
+  });
+}
+initBgMaskDrawing();
+
+// Returns a w*h array of 0-255 values: 0 = colour1, 255 = colour2 (soft edges in
+// between). Unifies the line and hand-drawn modes so rendering and the print
+// kit only need one code path.
+function computeBackgroundMask(w, h){
+  const angle = parseInt(document.getElementById('splitAngle').value);
+  const pos = parseInt(document.getElementById('splitPosition').value);
+
+  if(bgSplitMode === 'draw'){
+    const maskCanvas = document.getElementById('bgMaskCanvas');
+    const off = document.createElement('canvas');
+    off.width = w; off.height = h;
+    const octx = off.getContext('2d');
+    octx.fillStyle = '#000';
+    octx.fillRect(0, 0, w, h);
+    octx.save();
+    octx.translate(w/2, h/2);
+    octx.rotate(angle*Math.PI/180);
+    octx.translate((pos-50)/100 * Math.max(w,h) * 1.5, 0);
+    octx.drawImage(maskCanvas, -w/2, -h/2, w, h);
+    octx.restore();
+    const data = octx.getImageData(0, 0, w, h).data;
+    const out = new Uint8ClampedArray(w*h);
+    for(let i=0; i<w*h; i++) out[i] = data[i*4];
+    return out;
+  }
+
+  const sp = computeSplitParams(w, h, angle, pos);
+  const out = new Uint8ClampedArray(w*h);
+  for(let y=0; y<h; y++){
+    for(let x=0; x<w; x++){
+      let t = (x*sp.nx + y*sp.ny - (sp.d - sp.feather)) / (2*sp.feather);
+      t = Math.max(0, Math.min(1, t));
+      t = t*t*(3-2*t);
+      out[y*w+x] = Math.round(t*255);
+    }
+  }
+  return out;
+}
+
 // ---- Locks: protect a value from any randomize button ----
 const locks = {};
 function isLocked(id){ return !!locks[id]; }
@@ -669,9 +800,7 @@ document.getElementById('randomizeBgBtn').addEventListener('click', ()=>{
 function getImageFilter(forPreview){
   const brightness = 100 + parseInt(document.getElementById('imgBrightness').value);
   const contrast = 100 + parseInt(document.getElementById('imgContrast').value);
-  const blur = parseInt(document.getElementById('imgBlur').value);
   let f = `brightness(${brightness}%) contrast(${contrast}%)`;
-  if(blur > 0) f += ` blur(${blur}px)`;
   if(forPreview) f += ' grayscale(100%)';
   return f;
 }
@@ -697,7 +826,6 @@ function updateImagePreview(){
 const imageControlsMap = [
   ['imgBrightness','imgBrightnessVal', v=>v],
   ['imgContrast','imgContrastVal', v=>v],
-  ['imgBlur','imgBlurVal', v=>v+'px'],
 ];
 imageControlsMap.forEach(([id,labelId,fmt])=>{
   const el = document.getElementById(id);
@@ -711,10 +839,8 @@ imageControlsMap.forEach(([id,labelId,fmt])=>{
 document.getElementById('resetImageBtn').addEventListener('click', ()=>{
   document.getElementById('imgBrightness').value = 0;
   document.getElementById('imgContrast').value = 0;
-  document.getElementById('imgBlur').value = 0;
   document.getElementById('imgBrightnessVal').textContent = '0';
   document.getElementById('imgContrastVal').textContent = '0';
-  document.getElementById('imgBlurVal').textContent = '0px';
   updateImagePreview();
   scheduleRender();
 });
@@ -729,6 +855,7 @@ function randomPassParams(){
     offsetX: randInt(-18, 18),
     offsetY: randInt(-18, 18),
     locked: false,
+    locks: {color:false, threshold:false, offsetX:false, offsetY:false},
   };
 }
 
@@ -774,20 +901,31 @@ function buildPassRows(){
         <div class="cm-swatch-input">
           <input type="color" class="pass-color" value="${pass.color}">
           <input type="text" class="pass-color-hex" value="${pass.color}" maxlength="7">
+          <button type="button" class="lock pass-field-lock${pass.locks.color ? ' locked' : ''}" data-field="color" title="Lock this value">${pass.locks.color ? '🔒' : '🔓'}</button>
         </div>
       </div>
       <div class="field">
         <label>Threshold <b class="pass-threshold-val">${pass.threshold}</b></label>
-        <input type="range" class="pass-threshold" min="5" max="95" value="${pass.threshold}">
-      </div>
-      <div class="pass-offsets">
-        <div class="field">
-          <label>Drift X <b class="pass-offx-val">${pass.offsetX}px</b></label>
-          <input type="range" class="pass-offx" min="-25" max="25" value="${pass.offsetX}">
+        <div class="field-row">
+          <input type="range" class="pass-threshold" min="5" max="95" value="${pass.threshold}">
+          <button type="button" class="dice pass-field-dice" data-field="threshold" title="Randomize threshold" ${pass.locks.threshold ? 'disabled' : ''}>🎲</button>
+          <button type="button" class="lock pass-field-lock${pass.locks.threshold ? ' locked' : ''}" data-field="threshold" title="Lock this value">${pass.locks.threshold ? '🔒' : '🔓'}</button>
         </div>
-        <div class="field">
-          <label>Drift Y <b class="pass-offy-val">${pass.offsetY}px</b></label>
+      </div>
+      <div class="field">
+        <label>Drift X <b class="pass-offx-val">${pass.offsetX}px</b></label>
+        <div class="field-row">
+          <input type="range" class="pass-offx" min="-25" max="25" value="${pass.offsetX}">
+          <button type="button" class="dice pass-field-dice" data-field="offsetX" title="Randomize drift X" ${pass.locks.offsetX ? 'disabled' : ''}>🎲</button>
+          <button type="button" class="lock pass-field-lock${pass.locks.offsetX ? ' locked' : ''}" data-field="offsetX" title="Lock this value">${pass.locks.offsetX ? '🔒' : '🔓'}</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Drift Y <b class="pass-offy-val">${pass.offsetY}px</b></label>
+        <div class="field-row">
           <input type="range" class="pass-offy" min="-25" max="25" value="${pass.offsetY}">
+          <button type="button" class="dice pass-field-dice" data-field="offsetY" title="Randomize drift Y" ${pass.locks.offsetY ? 'disabled' : ''}>🎲</button>
+          <button type="button" class="lock pass-field-lock${pass.locks.offsetY ? ' locked' : ''}" data-field="offsetY" title="Lock this value">${pass.locks.offsetY ? '🔒' : '🔓'}</button>
         </div>
       </div>
     `;
@@ -821,11 +959,32 @@ function buildPassRows(){
       scheduleRender();
     });
 
+    row.querySelectorAll('.pass-field-dice').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const field = btn.dataset.field;
+        if(pass.locks[field]) return;
+        if(field === 'threshold') pass.threshold = randInt(5, 95);
+        else if(field === 'offsetX') pass.offsetX = randInt(-25, 25);
+        else if(field === 'offsetY') pass.offsetY = randInt(-25, 25);
+        buildPassRows();
+        scheduleRender();
+      });
+    });
+    row.querySelectorAll('.pass-field-lock').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const field = btn.dataset.field;
+        pass.locks[field] = !pass.locks[field];
+        buildPassRows();
+      });
+    });
+
     row.querySelector('.dice-pass').addEventListener('click', ()=>{
       if(pass.locked) return;
       const fresh = randomPassParams();
-      pass.color = fresh.color; pass.threshold = fresh.threshold;
-      pass.offsetX = fresh.offsetX; pass.offsetY = fresh.offsetY;
+      if(!pass.locks.color) pass.color = fresh.color;
+      if(!pass.locks.threshold) pass.threshold = fresh.threshold;
+      if(!pass.locks.offsetX) pass.offsetX = fresh.offsetX;
+      if(!pass.locks.offsetY) pass.offsetY = fresh.offsetY;
       buildPassRows();
       scheduleRender();
     });
@@ -869,8 +1028,10 @@ document.getElementById('randomizePassesBtn').addEventListener('click', ()=>{
   inkPasses.forEach(pass=>{
     if(pass.locked) return;
     const fresh = randomPassParams();
-    pass.color = fresh.color; pass.threshold = fresh.threshold;
-    pass.offsetX = fresh.offsetX; pass.offsetY = fresh.offsetY;
+    if(!pass.locks.color) pass.color = fresh.color;
+    if(!pass.locks.threshold) pass.threshold = fresh.threshold;
+    if(!pass.locks.offsetX) pass.offsetX = fresh.offsetX;
+    if(!pass.locks.offsetY) pass.offsetY = fresh.offsetY;
   });
   buildPassRows();
   scheduleRender();
@@ -943,12 +1104,14 @@ document.getElementById('randomizeAllBtn').addEventListener('click', ()=>{
   inkPasses.forEach(pass=>{
     if(pass.locked) return;
     const fresh = randomPassParams();
-    pass.color = fresh.color; pass.threshold = fresh.threshold;
-    pass.offsetX = fresh.offsetX; pass.offsetY = fresh.offsetY;
+    if(!pass.locks.color) pass.color = fresh.color;
+    if(!pass.locks.threshold) pass.threshold = fresh.threshold;
+    if(!pass.locks.offsetX) pass.offsetX = fresh.offsetX;
+    if(!pass.locks.offsetY) pass.offsetY = fresh.offsetY;
   });
   shuffleUnlockedPasses();
   buildPassRows();
-  ['feather','imgBrightness','imgContrast','imgBlur','splitAngle','splitPosition'].forEach(randomizeSlider);
+  ['feather','imgBrightness','imgContrast','splitAngle','splitPosition'].forEach(randomizeSlider);
   scheduleRender();
 });
 
@@ -1003,12 +1166,10 @@ function renderPrint(canvas){
   const feather = parseInt(document.getElementById('feather').value)/100;
 
   const bgRGB1 = hexToRgb(document.getElementById('groundColorHex').value);
-  let bgRGB2 = bgRGB1, split = null;
+  let bgRGB2 = bgRGB1, bgMask = null;
   if(splitBgEnabled){
     bgRGB2 = hexToRgb(document.getElementById('groundColor2Hex').value);
-    const angle = parseInt(document.getElementById('splitAngle').value);
-    const pos = parseInt(document.getElementById('splitPosition').value);
-    split = computeSplitParams(w, h, angle, pos);
+    bgMask = computeBackgroundMask(w, h);
   }
   const lum = getSourceLuminance(sourceImg, w, h);
 
@@ -1027,10 +1188,8 @@ function renderPrint(canvas){
       const idx = y*w+x;
 
       let r, g, b;
-      if(split){
-        let t = (x*split.nx + y*split.ny - (split.d - split.feather)) / (2*split.feather);
-        t = Math.max(0, Math.min(1, t));
-        t = t*t*(3-2*t);
+      if(bgMask){
+        const t = bgMask[idx]/255;
         r = bgRGB1[0] + (bgRGB2[0]-bgRGB1[0])*t;
         g = bgRGB1[1] + (bgRGB2[1]-bgRGB1[1])*t;
         b = bgRGB1[2] + (bgRGB2[2]-bgRGB1[2])*t;
@@ -1116,13 +1275,14 @@ function captureConfig(){
   return {
     bg: document.getElementById('groundColorHex').value,
     splitEnabled: splitBgEnabled,
+    splitMode: bgSplitMode,
+    bgMaskDataUrl: (splitBgEnabled && bgSplitMode === 'draw') ? document.getElementById('bgMaskCanvas').toDataURL('image/png') : null,
     bg2: document.getElementById('groundColor2Hex').value,
     splitAngle: parseInt(document.getElementById('splitAngle').value),
     splitPosition: parseInt(document.getElementById('splitPosition').value),
     feather: parseInt(document.getElementById('feather').value),
     brightness: parseInt(document.getElementById('imgBrightness').value),
     contrast: parseInt(document.getElementById('imgContrast').value),
-    blur: parseInt(document.getElementById('imgBlur').value),
     passes: inkPasses.map(p => ({color:p.color, threshold:p.threshold, offsetX:p.offsetX, offsetY:p.offsetY})),
   };
 }
@@ -1143,6 +1303,21 @@ function applyConfig(cfg){
     document.getElementById('splitPosition').value = cfg.splitPosition;
     document.getElementById('splitPositionVal').textContent = cfg.splitPosition+'%';
   }
+  const mode = cfg.splitMode === 'draw' ? 'draw' : 'line';
+  bgSplitMode = mode;
+  document.querySelectorAll('.bg-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode===mode));
+  document.getElementById('bgDrawControls').style.display = mode==='draw' ? 'block' : 'none';
+  if(cfg.bgMaskDataUrl){
+    const maskCanvas = document.getElementById('bgMaskCanvas');
+    const maskCtx = maskCanvas.getContext('2d');
+    const img = new Image();
+    img.onload = ()=>{
+      maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+      maskCtx.drawImage(img, 0, 0, maskCanvas.width, maskCanvas.height);
+      scheduleRender();
+    };
+    img.src = cfg.bgMaskDataUrl;
+  }
   setSplitBgEnabled(!!cfg.splitEnabled);
 
   document.getElementById('feather').value = cfg.feather;
@@ -1151,8 +1326,6 @@ function applyConfig(cfg){
   document.getElementById('imgBrightnessVal').textContent = cfg.brightness;
   document.getElementById('imgContrast').value = cfg.contrast;
   document.getElementById('imgContrastVal').textContent = cfg.contrast;
-  document.getElementById('imgBlur').value = cfg.blur;
-  document.getElementById('imgBlurVal').textContent = cfg.blur+'px';
 
   inkPasses = cfg.passes.map(p => Object.assign(randomPassParams(), {
     color: p.color, threshold: p.threshold, offsetX: p.offsetX, offsetY: p.offsetY, locked: false,
@@ -1368,10 +1541,10 @@ async function downloadPrintKit(){
     files.push({name:'proof.png', data: await canvasToPngBytesAt300dpi(proofCanvas)});
 
     if(splitBgEnabled){
-      const sp = computeSplitParams(w, h, splitAngle, splitPosition);
+      const mask = computeBackgroundMask(w, h);
       const sides = [
-        {name: 'film-00a-ground-A.png', sideB: false},
-        {name: 'film-00b-ground-B.png', sideB: true},
+        {name: 'film-00a-ground-A.png', wantHigh: false},
+        {name: 'film-00b-ground-B.png', wantHigh: true},
       ];
       for(const side of sides){
         const c = document.createElement('canvas');
@@ -1379,14 +1552,11 @@ async function downloadPrintKit(){
         const ctx = c.getContext('2d');
         const imgData = ctx.createImageData(w, h);
         const data = imgData.data;
-        for(let y=0; y<h; y++){
-          for(let x=0; x<w; x++){
-            const proj = x*sp.nx + y*sp.ny;
-            const onSideB = proj >= sp.d;
-            const v = (onSideB === side.sideB) ? 0 : 255;
-            const idx = (y*w+x)*4;
-            data[idx] = v; data[idx+1] = v; data[idx+2] = v; data[idx+3] = 255;
-          }
+        for(let i=0; i<w*h; i++){
+          const isHigh = mask[i] >= 128;
+          const v = (isHigh === side.wantHigh) ? 0 : 255;
+          const idx = i*4;
+          data[idx] = v; data[idx+1] = v; data[idx+2] = v; data[idx+3] = 255;
         }
         ctx.putImageData(imgData, 0, 0);
         drawRegMarks(ctx, w, h);
@@ -1438,7 +1608,11 @@ async function downloadPrintKit(){
     lines.push('');
     lines.push('BACKGROUND / SUBSTRATE');
     if(splitBgEnabled){
-      lines.push(`  Split into two flat colours divided by a straight line at ${splitAngle}°, position ${splitPosition}%.`);
+      if(bgSplitMode === 'draw'){
+        lines.push(`  Split into two flat colours following a hand-drawn shape, rotated ${splitAngle}° and shifted to position ${splitPosition}%.`);
+      } else {
+        lines.push(`  Split into two flat colours divided by a straight line at ${splitAngle}°, position ${splitPosition}%.`);
+      }
       lines.push(`  Colour A (film-00a-ground-A.png): ${bgHex}`);
       lines.push(`  Colour B (film-00b-ground-B.png): ${bgHex2}`);
       lines.push('  Print both as full flood coats using their own screen — each film is masked to only its half, and both share the same registration marks, so the two colours should meet cleanly along the line once aligned.');
